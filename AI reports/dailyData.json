@@ -1,0 +1,60 @@
+[
+    {
+        "date": "2025-11-08",
+        "title": "Moonshot发布1万亿参数Kimi K2 Thinking模型；OpenAI推GPT-5 Pro与Sora 2并规划万亿美元基础设施；Anthropic推出Claude Skills革新Agent构建方式",
+        "tags": [
+            "大模型发布",
+            "MoE架构",
+            "Agent生态",
+            "AI基础设施",
+            "多模态模型"
+        ]
+    },
+    {
+        "date": "2025-11-09",
+        "title": "OpenAI o3-pro性能登顶；Kimi K2 1T参数开源领跑；MiniMax M2成最强开源模型；GPT-5 Pro微弱领先Gemini 2.5数学推理",
+        "tags": [
+            "大模型发布",
+            "开源生态",
+            "AI基准评测",
+            "多模态模型",
+            "推理优化",
+            "AI企业动态"
+        ]
+    },
+    {
+        "date": "2025-11-06",
+        "title": "Kimi K2 Thinking发布，1万亿参数MoE模型创SOTA；OpenAI重组成立公共利益公司并规划250GW算力；Claude Skills与OpenAI AgentKit推动Agent生态爆发",
+        "tags": [
+            "大模型突破",
+            "MoE架构",
+            "AI企业动态",
+            "智能体生态",
+            "计算基础设施",
+            "开发者工具"
+        ]
+    },
+    {
+        "date": "2025-11-05",
+        "title": "Kimi K2 Thinking发布1T参数MoE模型；Anthropic推出Claude Skills代理构建新范式；OpenAI自研ASIC芯片计划曝光",
+        "tags": [
+            "MoE架构",
+            "AI代理系统",
+            "大模型基础设施",
+            "开源生态",
+            "多模态模型"
+        ]
+    },
+    {
+        "date": "2025-11-03",
+        "title": "OpenAI与AWS达成380亿美元计算交易；阿里巴巴发布Qwen3-Max-Thinking预览版；MiniMax M2登顶Arena WebDev leaderboard；LlamaIndex LIGHT框架超越长上下文LLM",
+        "tags": [
+            "AI企业动态",
+            "计算硬件",
+            "长上下文处理",
+            "MoE架构",
+            "开源生态",
+            "智能体与工具"
+        ]
+    }
+]
