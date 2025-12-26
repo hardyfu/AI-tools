@@ -1,18 +1,22 @@
 import os
 import sys
 import re
-from config import LLM_MODEL_ID  # 导入配置
+from config import get_llm_client  # 导入配置获取函数
 from extractor import get_article  # 导入文章提取功能
 from llm_service import llm_call_streaming  # 导入 LLM 调用功能
 from datetime import datetime
 
 
-def clean_and_summarize():
+def clean_and_summarize(provider='qwen'):
     """主流程：提取、清理并总结文章"""
 
-    # 1. 提取文章内容
+    # 1. 初始化 LLM 客户端
+    client, model_id, provider_type, extra_config = get_llm_client(provider)
+    if not client:
+        return f"无法总结文章：{provider.upper()} 客户端初始化失败，请检查配置。"
+
+    # 2. 提取文章内容
     article_data = get_article(input("输入需要总结的文章URL：\n"))
-    # 🚨 移除：提取标题和文本验证的打印
 
     if not article_data or not article_data.get('text'):
         print("🔴 提取失败，无法继续总结。", file=sys.stderr)
@@ -22,12 +26,12 @@ def clean_and_summarize():
         else:
             return f"无法总结文章：{article_data.get('title', 'N/A')} (内容为空)"
 
-    # 2. 清理文本
+    # 3. 清理文本
     text = article_data['text']
     url_pattern = r'https?://\S+|www\.\S+|ftp://\S+'
     cleaned_text = re.sub(url_pattern, ' [链接已移除] ', text)
 
-    # 3. 读取提示词
+    # 4. 读取提示词
     base_dir = os.path.dirname(os.path.abspath(__file__))
     prompt_path = os.path.join(base_dir, 'prompt.md')
 
@@ -38,15 +42,21 @@ def clean_and_summarize():
         with open(prompt_path, 'r', encoding='utf-8') as f:
             prompt = f.read()
 
-    # 4. 构造完整提示词
+    # 5. 构造完整提示词
     summary_prompt = (
         f"{prompt}\n\n"
         f"文章内容：\n---\n{cleaned_text}"
     )
 
-    # 5. 调用 LLM API (静默流式)
+    # 6. 调用 LLM API (静默流式)
     try:
-        summary = llm_call_streaming(prompt=summary_prompt, model_id=LLM_MODEL_ID)
+        summary = llm_call_streaming(
+            prompt=summary_prompt, 
+            client=client, 
+            model_id=model_id, 
+            provider_type=provider_type,
+            extra_config=extra_config
+        )
         return summary
     except Exception as e:
         return f"LLM 总结失败: {e}"
@@ -58,21 +68,34 @@ def clean_and_summarize():
 
 if __name__ == "__main__":
 
-    print("================ 文章抓取与 Qwen 静默总结启动 ================")
+    print("================ 文章抓取与多模型总结启动 ================")
+
+    # 让用户选择模型
+    print("请选择 LLM 提供商:")
+    print("1. Qwen (默认)")
+    print("2. Gemini")
+    choice = input("请输入选项 (1/2): ").strip()
+    
+    provider = 'qwen'
+    if choice == '2':
+        provider = 'gemini'
+
+    print(f"--- 正在使用 {provider.upper()} 进行总结 ---")
 
     # 运行主流程
-    final_summary = clean_and_summarize()
+    final_summary = clean_and_summarize(provider=provider)
 
     print("\n================ 最终总结写入文件 ================")
 
-    # 路径构建：当前工作目录/summary/summary.md
-    summary_dir = os.path.join(os.getcwd(), 'summary')
+    # 路径构建：脚本所在目录/summary/
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    summary_dir = os.path.join(base_dir, 'summary')
 
     # 确保目录存在
     os.makedirs(summary_dir, exist_ok=True)
 
     # 构建最终路径
-    date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    date = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
     save_path = os.path.join(summary_dir, f'{date} summary.md')
 
     try:
@@ -83,4 +106,3 @@ if __name__ == "__main__":
         print(f"❌ 文件保存失败: {e}", file=sys.stderr)
 
     print("==================================================")
-

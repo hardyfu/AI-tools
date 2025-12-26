@@ -3,7 +3,7 @@ import os
 
 
 def download_podcast_audio(url: str, temp_dir: str):
-    proxy_address = "127.0.0.1:7897"
+    proxy_address = "127.0.0.1:7890"
     os.environ['http_proxy'] = f"http://{proxy_address}"
     os.environ['https_proxy'] = f"http://{proxy_address}"
 

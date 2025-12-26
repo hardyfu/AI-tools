@@ -4,6 +4,9 @@ import time
 import warnings
 from tqdm import tqdm
 import threading
+import ssl
+
+ssl._create_default_https_context = ssl._create_unverified_context
 
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU")
 

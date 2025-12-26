@@ -25,4 +25,6 @@ When I co-founded (/ˌkoʊˈfaʊndɪd/, 共同创立) Whole Foods, my goal wasn'
 直接按照一下结构进行内容输出，不要有其他的内容。
 1. 演讲稿分段与重点词汇短语标注
 2. 精讲词汇表（Vocabulary Deep Dive）
+| 单词            | 国际音标       | 核心中文释义   | 视频语境例句                                                 | 商务或日常交流例句                                           |
+## 
 3. 精选短语、句式和表达（Key Phrases for Communication）

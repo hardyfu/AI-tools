@@ -1,46 +1,47 @@
-import sys
-from config import client, LLM_API_URL  # 导入客户端实例和 URL
-
-
-def llm_call_streaming(prompt: str, model_id: str) -> str:
+def llm_call_streaming(prompt: str, client, model_id: str, provider_type: str, extra_config: dict = None) -> str:
     """
-    调用 LLM API 生成内容，不在控制台实时打印，只返回完整的摘要文本。
+    调用 LLM API 生成内容，支持 OpenAI (Qwen) 和 Google GenAI (Gemini)
     """
     if client is None:
-        raise Exception("LLM 客户端未初始化成功，无法进行调用。")
+        raise Exception(f"LLM 客户端 ({provider_type}) 未提供或初始化失败。")
 
-    print("  [LLM] 正在生成摘要 (静默模式)...")  # 仅保留过程状态提示
+    print(f"  [LLM] 正在生成摘要 ({provider_type} 静默模式)...")
 
-    messages = [
-        {'role': 'system', 'content': '你是一位专业的中文摘要专家。'},
-        {'role': 'user', 'content': prompt}
-    ]
-
-    try:
-        completion = client.chat.completions.create(
-            model=model_id,
-            messages=messages,
-            temperature=0.3,
-            extra_body={"enable_thinking": False},  # 虽然不显示，但仍可启用
-            stream=True
-        )
-    except Exception as e:
-        raise Exception(f'LLM API 调用失败: 请检查 API 密钥、URL 或网络连接。原始错误: {e}')
-
-    # --- 静默流式处理逻辑 ---
     full_summary = ""
 
     try:
-        for chunk in completion:
-            delta = chunk.choices[0].delta
+        if provider_type == 'openai':
+            messages = [
+                {'role': 'system', 'content': '你是一位专业的中文摘要专家。'},
+                {'role': 'user', 'content': prompt}
+            ]
+            completion = client.chat.completions.create(
+                model=model_id,
+                messages=messages,
+                temperature=0.3,
+                extra_body=extra_config,
+                stream=True
+            )
+            for chunk in completion:
+                delta = chunk.choices[0].delta
+                if hasattr(delta, "content") and delta.content:
+                    full_summary += delta.content
 
-            # 仅收集内容，不再打印思考过程或回复
-            if hasattr(delta, "content") and delta.content:
-                content = delta.content
-                full_summary += content
+        elif provider_type == 'google':
+            # Gemini Native SDK (google-genai)
+            # extra_config 已经是 types.GenerateContentConfig
+            response_stream = client.models.generate_content_stream(
+                model=model_id,
+                contents=prompt,
+                config=extra_config
+            )
+            for chunk in response_stream:
+                if chunk.text:
+                    full_summary += chunk.text
 
     except Exception as e:
-        print(f"\n❌ LLM 流式处理中途发生错误: {e}", file=sys.stderr)
-        return full_summary if full_summary else "LLM 流式调用失败或中断。"
+        import sys
+        print(f"\n❌ LLM 处理中途发生错误: {e}", file=sys.stderr)
+        return full_summary if full_summary else f"LLM 调用失败: {e}"
 
-    return full_summary  # 返回完整的摘要
+    return full_summary

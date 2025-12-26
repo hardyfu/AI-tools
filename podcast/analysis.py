@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+import google
 from google import genai
 
 # 保持你原有的编码重定向
@@ -11,7 +12,7 @@ sys.stderr.reconfigure(encoding='utf-8')
 
 def analyze_and_save(api_key, transcript_file, output_dir, prompt_file="prompt.md"):
     # 1. 代理配置
-    proxy_address = "127.0.0.1:7897"
+    proxy_address = "127.0.0.1:7890"
     os.environ['http_proxy'] = f"http://{proxy_address}"
     os.environ['https_proxy'] = f"http://{proxy_address}"
 
@@ -71,3 +72,15 @@ def analyze_and_save(api_key, transcript_file, output_dir, prompt_file="prompt.m
                 print("\n✨ 云端临时文件已清理。")
             except:
                 pass
+
+if __name__ == "__main__":
+    # 简单测试
+    api_key=input("请输入 Gemini API Key: ").strip()
+    transcript_file="/Users/ryan/Desktop/pythoncode/podcast/temp/How_to_make_AI_a_force_for_good_in_climate_Amen_Ra_Mashariki_and_Manoush_Zomorodi_transcript.txt"
+    output_dir="output"
+
+    result = analyze_and_save(api_key, transcript_file, output_dir)
+    if result:
+        print(f"分析结果已保存至: {result}")
+    else:
+        print("分析失败。")
