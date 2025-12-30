@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from google import genai
 from google.genai import types
+import json
 
 # ----------------------------------------------------
 # ❗ 第一步：加载 .env 文件中的环境变量
@@ -14,14 +15,20 @@ load_dotenv()
 
 # --- 配置信息 (现在从环境变量中读取) ---
 
+with open("/Users/ryan/Desktop/API.json", "r") as f:
+    api_data = json.load(f)  # 只读取一次
+    diffbot_api = api_data["DIFFBOT"]
+    qwen_api = api_data["QWEN"]
+    gemini_api = api_data["GEMINI"]
+
 # Diffbot 配置
-DIFFBOT_API_TOKEN = os.getenv('DIFFBOT_API_TOKEN', 'd0cc70644a648dc5f848172e9cbdfcd2')
+DIFFBOT_API_TOKEN = os.getenv('DIFFBOT_API_TOKEN', diffbot_api)
 
 # LLM 配置
 LLM_CONFIGS = {
     'qwen': {
         'type': 'openai',
-        'api_key': os.getenv('DASHSCOPE_API_KEY', input("请输入 DashScope API Key: ")),
+        'api_key': os.getenv('DASHSCOPE_API_KEY', qwen_api),
         'base_url': os.getenv('QWEN_API_URL', 'https://dashscope.aliyuncs.com/compatible-mode/v1'),
         'model_id': os.getenv('QWEN_MODEL_ID', 'qwen-plus-2025-12-01'),
         'proxy': None,
@@ -29,7 +36,7 @@ LLM_CONFIGS = {
     },
     'gemini': {
         'type': 'google',
-        'api_key': os.getenv('GEMINI_API_KEY', input("请输入 Gemini API Key: ")),
+        'api_key': os.getenv('GEMINI_API_KEY', gemini_api),
         'model_id': os.getenv('GEMINI_MODEL_ID', 'gemini-3-flash-preview'),
         'proxy': 'http://127.0.0.1:7890',
         'thinking_level': 'low'
