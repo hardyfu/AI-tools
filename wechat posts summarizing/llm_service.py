@@ -12,8 +12,8 @@ def llm_call_streaming(prompt: str, client, model_id: str, provider_type: str, e
     try:
         if provider_type == 'openai':
             messages = [
-                {'role': 'system', 'content': '你是一位专业的中文摘要专家。'},
-                {'role': 'user', 'content': prompt}
+                {'role': 'system', 'content': prompt},
+                # {'role': 'user', 'content': prompt}
             ]
             completion = client.chat.completions.create(
                 model=model_id,

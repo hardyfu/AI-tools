@@ -21,7 +21,7 @@ DIFFBOT_API_TOKEN = os.getenv('DIFFBOT_API_TOKEN', 'd0cc70644a648dc5f848172e9cbd
 LLM_CONFIGS = {
     'qwen': {
         'type': 'openai',
-        'api_key': os.getenv('DASHSCOPE_API_KEY', 'sk-9a91e09e3560466ea25b20054dce2957'),
+        'api_key': os.getenv('DASHSCOPE_API_KEY', input("请输入 DashScope API Key: ")),
         'base_url': os.getenv('QWEN_API_URL', 'https://dashscope.aliyuncs.com/compatible-mode/v1'),
         'model_id': os.getenv('QWEN_MODEL_ID', 'qwen-plus-2025-12-01'),
         'proxy': None,
@@ -29,7 +29,7 @@ LLM_CONFIGS = {
     },
     'gemini': {
         'type': 'google',
-        'api_key': os.getenv('GEMINI_API_KEY', 'AIzaSyAwubRFMgLZujiFgylHkJmSvWUEdTHzvsk'),
+        'api_key': os.getenv('GEMINI_API_KEY', input("请输入 Gemini API Key: ")),
         'model_id': os.getenv('GEMINI_MODEL_ID', 'gemini-3-flash-preview'),
         'proxy': 'http://127.0.0.1:7890',
         'thinking_level': 'low'
