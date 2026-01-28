@@ -1,0 +1,5 @@
+git add .
+git commit -m "bug fix"
+git push --set-upstream origin main
+git status
+git log --oneline
