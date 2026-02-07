@@ -30,7 +30,7 @@ LLM_CONFIGS = {
         'type': 'openai',
         'api_key': os.getenv('DASHSCOPE_API_KEY', qwen_api),
         'base_url': os.getenv('QWEN_API_URL', 'https://dashscope.aliyuncs.com/compatible-mode/v1'),
-        'model_id': os.getenv('QWEN_MODEL_ID', 'qwen-plus-2025-12-01'),
+        'model_id': os.getenv('QWEN_MODEL_ID', 'qwen3-max-2026-01-23'),
         'proxy': None,
         'extra_body': {}
     },
