@@ -1,5 +1,7 @@
 import subprocess
 import os
+import sys
+import tempfile
 
 
 def download_podcast_audio(url: str, temp_dir: str):
@@ -28,3 +30,18 @@ def download_podcast_audio(url: str, temp_dir: str):
     except Exception as e:
         print(f"❌ 下载失败: {e}")
         return None
+
+
+if __name__ == "__main__":
+    url = input("请输入 YouTube 链接: ").strip()
+    if not url:
+        print("❌ 未提供有效的链接")
+        sys.exit(1)
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        result = download_podcast_audio(url, temp_dir)
+        if result:
+            print(f"✅ 音频已下载: {result}")
+        else:
+            print("❌ 下载失败")
+            sys.exit(1)

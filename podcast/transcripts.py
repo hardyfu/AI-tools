@@ -5,6 +5,7 @@ import warnings
 from tqdm import tqdm
 import threading
 import ssl
+import sys
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -31,9 +32,28 @@ def transcribe_audio_with_whisper(audio_path: str, model_size: str = 'base'):
     try:
         result = model.transcribe(audio_path, verbose=None)
         with open(output_filename, "w", encoding="utf-8") as f:
-            f.write(result["text"].strip())
+            f.write(result["text"].strip() if isinstance(result["text"], str) else str(result["text"]))
         return output_filename
     finally:
         stop_event.set()
         spinner_thread.join()
         pbar.close()
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        audio_path = sys.argv[1]
+    else:
+        audio_path = input("请输入要处理的音频文件路径: ").strip()
+    
+    if not audio_path or not os.path.exists(audio_path):
+        print("❌ 未提供有效的音频文件路径")
+        sys.exit(1)
+    
+    model_size = input("选择模型大小 (tiny/base/small/medium/large, 默认 base): ").strip() or "base"
+    result = transcribe_audio_with_whisper(audio_path, model_size)
+    if result:
+        print(f"✅ 转录完成: {result}")
+    else:
+        print("❌ 转录失败")
+        sys.exit(1)
