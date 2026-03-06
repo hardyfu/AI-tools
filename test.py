@@ -89,7 +89,7 @@ def download_and_process_video(video_url, output_path='.'):
         'format': 'best',
         'outtmpl': f'{output_path}/%(title)s.%(ext)s',
         'noplaylist': True,
-        'cookiesfrombrowser': ('chrome',),
+        # 'cookiesfrombrowser': ('chrome',),
     }
 
     try:
