@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum BookName {
+  child
+  family
+}
+
+enum TransactionType {
+  income
+  expense
+}
+
+model Book {
+  id                String             @id @default(cuid())
+  name              BookName           @unique
+  displayName       String
+  createdAt         DateTime           @default(now())
+  categories        Category[]
+  transactions      Transaction[]
+  salaryAllocations SalaryAllocation[]
+  openingFund       OpeningFund?
+}
+
+model Category {
+  id           String          @id @default(cuid())
+  bookId       String?
+  type         TransactionType
+  name         String
+  isDefault    Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  book         Book?           @relation(fields: [bookId], references: [id])
+  transactions Transaction[]
+
+  @@unique([bookId, type, name])
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  bookId       String
+  type        TransactionType
+  amount      Decimal
+  date        DateTime
+  categoryId  String
+  note        String?
+  relationKey String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  book        Book            @relation(fields: [bookId], references: [id])
+  category    Category        @relation(fields: [categoryId], references: [id])
+
+  @@index([bookId, date])
+  @@index([relationKey])
+}
+
+model SalaryAllocation {
+  id           String                 @id @default(cuid())
+  bookId       String
+  month        String
+  salaryAmount Decimal
+  note         String?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  book         Book                   @relation(fields: [bookId], references: [id])
+  items        SalaryAllocationItem[]
+
+  @@unique([bookId, month])
+}
+
+model SalaryAllocationItem {
+  id           String           @id @default(cuid())
+  allocationId String
+  itemName     String
+  amount       Decimal
+  note         String?
+  createdAt    DateTime         @default(now())
+  allocation   SalaryAllocation @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+}
+
+model OpeningFund {
+  id               String              @id @default(cuid())
+  bookId           String              @unique
+  cashAmount       Decimal             @default(0)
+  wealthAmount     Decimal             @default(0)
+  investmentAmount Decimal             @default(0)
+  goldWeight       Decimal             @default(0)
+  goldAvgPrice     Decimal             @default(0)
+  goldValuation    Decimal             @default(0)
+  note             String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  book             Book                @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  buckets          OpeningFundBucket[]
+}
+
+model OpeningFundBucket {
+  id            String      @id @default(cuid())
+  openingFundId String
+  name          String
+  amount        Decimal     @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  openingFund   OpeningFund @relation(fields: [openingFundId], references: [id], onDelete: Cascade)
+
+  @@index([openingFundId])
+}

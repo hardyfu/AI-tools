@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS "OpeningFund" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "bookId" TEXT NOT NULL,
+  "cashAmount" DECIMAL NOT NULL DEFAULT 0,
+  "wealthAmount" DECIMAL NOT NULL DEFAULT 0,
+  "investmentAmount" DECIMAL NOT NULL DEFAULT 0,
+  "note" TEXT,
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "OpeningFund_bookId_key" ON "OpeningFund"("bookId");
