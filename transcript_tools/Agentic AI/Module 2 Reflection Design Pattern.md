@@ -1,4 +1,4 @@
-# Module 2: Reflection Design Pattern
+# Module 2 Reflection Design Pattern
 
 ## Reflection to improve outputs of a task
 
