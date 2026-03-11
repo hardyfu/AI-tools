@@ -1,4 +1,4 @@
-# Module 3: Tool use
+# Module 3 Tool use
 
 ## What are tools?
 
