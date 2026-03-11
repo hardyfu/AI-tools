@@ -1,4 +1,4 @@
-# Module 4: Practical Tips for Building Agentic AI
+# Module 4 Practical Tips for Building Agentic AI
 
 ## Evaluations (evals)
 
