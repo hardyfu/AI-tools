@@ -1,4 +1,4 @@
-# Module 1: Introduction to Agentic Workflows
+# Module 1 Introduction to Agentic Workflows
 
 ## What is agentic AI?
 
