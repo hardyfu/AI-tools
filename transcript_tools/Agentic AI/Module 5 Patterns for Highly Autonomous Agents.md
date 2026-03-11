@@ -1,4 +1,4 @@
-# Module 5: Patterns for Highly Autonomous Agents
+# Module 5 Patterns for Highly Autonomous Agents
 
 ## Planning workflows
 
