@@ -8,9 +8,9 @@ usage() {
   cat <<'EOF'
 Usage: push_with_comment.sh [commit message]
 
-Stages all changes, creates a commit with your message, and pushes to the
-current branch's upstream. If no commit message is provided, the script will
-prompt for one.
+Safely syncs the current branch with its upstream, stages local changes,
+creates a commit with your message, and pushes. If no commit message is
+provided, the script will prompt for one.
 EOF
 }
 
@@ -32,6 +32,42 @@ if [[ -z "$current_branch" ]]; then
   exit 1
 fi
 
+echo "Repository: $REPO_DIR"
+echo "Branch: $current_branch"
+
+upstream_ref="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+if [[ -z "$upstream_ref" ]]; then
+  echo "No upstream is configured for $current_branch." >&2
+  echo "Set one with: git branch --set-upstream-to origin/$current_branch" >&2
+  exit 1
+fi
+
+echo "Fetching latest upstream..."
+git fetch
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "Syncing upstream with rebase before commit..."
+  git pull --rebase --autostash
+else
+  local_head="$(git rev-parse HEAD)"
+  upstream_head="$(git rev-parse "$upstream_ref")"
+  if [[ "$local_head" != "$upstream_head" ]]; then
+    echo "Branch is behind upstream. Rebasing before commit..."
+    git pull --rebase
+  fi
+fi
+
+echo "Staging changes..."
+git add -A
+
+if git diff --cached --quiet; then
+  echo "No local changes to commit."
+  echo "Pushing current branch state..."
+  git push
+  echo "Done."
+  exit 0
+fi
+
 commit_message="${1:-}"
 if [[ -z "$commit_message" ]]; then
   printf "Commit message: "
@@ -41,16 +77,6 @@ fi
 if [[ -z "$commit_message" ]]; then
   echo "Commit message cannot be empty." >&2
   exit 1
-fi
-
-echo "Repository: $REPO_DIR"
-echo "Branch: $current_branch"
-echo "Staging changes..."
-git add -A
-
-if git diff --cached --quiet; then
-  echo "No staged changes to commit."
-  exit 0
 fi
 
 echo "Staged summary:"
