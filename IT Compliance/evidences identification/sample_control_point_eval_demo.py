@@ -16,7 +16,7 @@ DOCX_PATH = BASE_DIR / "sample.docx"
 OUTPUT_PATH = BASE_DIR / "sample_control_eval_report.json"
 OUTPUT_MD_PATH = BASE_DIR / "sample_control_eval_report.md"
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
-VISION_MODEL = "qwen3-vl:8b"
+VISION_MODEL = "qwen3-vl:4b"
 JUDGE_MODEL = "qwen3:8b"
 
 NS = {

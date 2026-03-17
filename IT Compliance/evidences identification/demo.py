@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 import requests
 import tkinter as tk
 from tkinter import filedialog
@@ -7,7 +8,7 @@ from datetime import datetime
 
 # Ollama API 的默认本地地址
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
-VISION_MODEL_NAME = "qwen3-vl:8b"
+VISION_MODEL_NAME = "qwen3-vl:4b"
 JUDGE_MODEL_NAME = "qwen3:8b"
 
 
@@ -178,7 +179,12 @@ def main():
         print(json.dumps(result_data, indent=4, ensure_ascii=False))
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_filename = f"compliance_result_{timestamp}.json"
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        output_filename = os.path.join(
+            script_dir,
+            f"compliance_result_{timestamp}.json"
+            )
+        # output_filename = f"compliance_result_{timestamp}.json"
 
         with open(output_filename, 'w', encoding='utf-8') as f:
             json.dump(result_data, f, indent=4, ensure_ascii=False)
