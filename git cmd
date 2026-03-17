@@ -1,5 +1,6 @@
+git pull --rebase origin main   # 拉最新
+# 写代码 / 改文件
 git add .
-git commit -m "bug fix"
-git push --set-upstream origin main
-git status
-git log --oneline
+git commit -m "mac update"
+git pull --rebase origin main   # 再同步一次（关键）
+git push origin main            # 推上云端
