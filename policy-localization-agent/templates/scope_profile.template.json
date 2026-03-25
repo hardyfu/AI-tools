@@ -2,6 +2,8 @@
   "case_metadata": {
     "case_name": "unknown",
     "case_directory": "cases/<case_name>",
+    "global_policy_input_directory": "cases/<case_name>/input/global_policy",
+    "local_regulations_input_directory": "cases/<case_name>/input/local_regulations",
     "request_date": "unknown",
     "request_owner": "unknown",
     "status": "intake_in_progress"

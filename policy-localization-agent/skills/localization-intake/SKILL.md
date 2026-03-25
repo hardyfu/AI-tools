@@ -66,7 +66,10 @@ Create a complete enough `scope_profile.json` for downstream work without assumi
 11. Produce `scope_profile.json` from the template.
 12. Write the artifact to `cases/<case_name>/working/scope_profile.json`.
 13. If the source policy file path is known, record it in `source_policy.source_file_path_or_reference`.
-14. Stop after intake. Do not parse the policy or draft guidance.
+14. Tell the user where to place:
+   - the markdown global policy file for Agent01
+   - the markdown local law and regulation files for Agent02
+15. Stop after intake. Do not parse the policy or draft guidance.
 
 ## Quality Bar
 
@@ -77,6 +80,7 @@ A good intake artifact is:
 - explicit about field status: confirmed, inferred, or unknown
 - easy to inspect by a human reviewer
 - stored as structured JSON rather than prose-only notes
+- paired with clear next-step file placement instructions for downstream agents
 
 ## Guardrails
 

@@ -1,0 +1,26 @@
+{
+  "jurisdiction": "unknown",
+  "research_date": "unknown",
+  "local_regulation_files_reviewed": [],
+  "web_sources": [
+    {
+      "source_title": "unknown",
+      "source_link_or_reference": "unknown",
+      "source_type": "unknown",
+      "source_origin": "web",
+      "relevance": "unknown",
+      "related_topics_or_control_domains": []
+    }
+  ],
+  "relevant_obligations": [
+    {
+      "topic": "unknown",
+      "requirement_summary": "unknown",
+      "source_reference": "unknown",
+      "related_topics_or_control_domains": [],
+      "status": "confirmed"
+    }
+  ],
+  "open_issues": [],
+  "notes": "unknown"
+}

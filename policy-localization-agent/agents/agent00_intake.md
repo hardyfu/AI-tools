@@ -45,6 +45,11 @@ This agent is intake-only. It does not parse policy text, design localization lo
   - user conversation
   - optional case notes supplied by the user
   - optional source documents named by the user
+- Case directories to create after intake:
+  - `cases/<case_name>/input/`
+  - `cases/<case_name>/input/global_policy/`
+  - `cases/<case_name>/input/local_regulations/`
+  - `cases/<case_name>/working/`
 - Output file:
   - `cases/<case_name>/working/scope_profile.json`
 
@@ -65,7 +70,10 @@ This agent is intake-only. It does not parse policy text, design localization lo
 8. Generate `scope_profile.json` using the template.
 9. Write the artifact to `cases/<case_name>/working/scope_profile.json`.
 10. If the source policy file path is known, record it in `source_policy.source_file_path_or_reference`.
-11. If critical fields remain unknown, stop and surface the missing items clearly.
+11. After intake, tell the user where to place:
+   - the markdown global policy file for Agent01
+   - the markdown local law and regulation files for Agent02
+12. If critical fields remain unknown, stop and surface the missing items clearly.
 
 ### Questioning Standard
 
@@ -116,6 +124,7 @@ Agent00 is complete when:
 - unresolved items are explicit
 - `case_name` is stable enough to define the case working directory
 - `scope_profile.json` is sufficient for downstream handoff, or the remaining gaps are explicitly marked as unknown
+- the user has been told the expected input locations for global policy and local regulation files
 
 ### Out of Scope
 
