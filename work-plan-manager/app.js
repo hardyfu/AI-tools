@@ -297,6 +297,16 @@ async function loadState() {
   render();
 }
 
+async function shutdownApp() {
+  try {
+    await requestJson("/api/shutdown", { method: "POST" });
+  } catch {
+    // Ignore shutdown request errors and still try to close the page.
+  }
+  window.open("", "_self");
+  window.close();
+}
+
 function persistState() {
   state.saving = true;
   render();
@@ -1636,6 +1646,7 @@ function render() {
           <button type="button" class="button-ghost" data-action="open-project-create">新建项目</button>
           <button type="button" class="button-ghost" data-action="open-category-create">新建工作分类</button>
           <a class="button-ghost" href="#timeline">时间轴</a>
+          <button type="button" class="button-ghost danger-ghost" data-action="shutdown-app">退出</button>
           <button type="button" class="button-primary" data-action="open-create">新建计划</button>
         </div>
       </div>
@@ -1660,6 +1671,11 @@ function bindEvents() {
   });
   document.querySelectorAll("[data-action='open-category-create']").forEach((button) => {
     button.addEventListener("click", openCategoryComposer);
+  });
+  document.querySelectorAll("[data-action='shutdown-app']").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (window.confirm("确认退出并关闭本地服务吗？")) shutdownApp();
+    });
   });
   document.querySelectorAll("[data-action='close-composer']").forEach((button) => {
     button.addEventListener("click", closeComposer);

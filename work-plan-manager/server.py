@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
+import threading
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -13,6 +15,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "flowplan.db"
+PID_FILE = ROOT / ".server.pid"
 
 
 def init_db() -> None:
@@ -87,6 +90,23 @@ class FlowPlanHandler(SimpleHTTPRequestHandler):
         save_state(payload)
         self._write_json({"ok": True})
 
+    def do_POST(self) -> None:
+        if self.path != "/api/shutdown":
+          self.send_error(HTTPStatus.NOT_FOUND)
+          return
+
+        self._write_json({"ok": True, "message": "server shutting down"})
+
+        def _shutdown() -> None:
+            try:
+                if PID_FILE.exists():
+                    PID_FILE.unlink(missing_ok=True)
+            except OSError:
+                pass
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+
+        threading.Timer(0.1, _shutdown).start()
+
     def _write_json(self, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(HTTPStatus.OK)
@@ -99,6 +119,7 @@ class FlowPlanHandler(SimpleHTTPRequestHandler):
 def main() -> None:
     init_db()
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+    PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
     server = ThreadingHTTPServer(("127.0.0.1", port), FlowPlanHandler)
     print(f"FlowPlan server running at http://127.0.0.1:{port}")
     try:
@@ -106,6 +127,10 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        try:
+            PID_FILE.unlink(missing_ok=True)
+        except OSError:
+            pass
         server.server_close()
 
 

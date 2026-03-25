@@ -101,6 +101,17 @@ function sumByType(transactions: Transaction[]) {
   return { income, expense };
 }
 
+function applyFlowToAssets(assets: AssetItem[], netFlow: number) {
+  const nextAssets = assets.map((item) => ({ ...item }));
+  const cashIndex = nextAssets.findIndex((item) => item.name === "现金");
+  if (cashIndex >= 0) {
+    nextAssets[cashIndex].amount += netFlow;
+  } else {
+    nextAssets.push({ name: "现金", amount: netFlow });
+  }
+  return nextAssets.sort((a, b) => b.amount - a.amount);
+}
+
 export default function DashboardPage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [scopeId, setScopeId] = useState("all");
@@ -125,7 +136,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const loadBooks = async () => {
-      const res = await fetch("/api/books");
+      const res = await fetch("/api/books", { cache: "no-store" });
       const data = await res.json();
       const nextBooks = data.books as Book[];
       setBooks(nextBooks);
@@ -156,7 +167,7 @@ export default function DashboardPage() {
           targetBookIds.map((bookId) => {
             const params = new URLSearchParams(paramsByMode);
             params.set("bookId", bookId);
-            return fetch(`/api/transactions?${params.toString()}`);
+            return fetch(`/api/transactions?${params.toString()}`, { cache: "no-store" });
           }),
         );
 
@@ -170,8 +181,8 @@ export default function DashboardPage() {
           selected.type === "all"
             ? "/api/opening-funds/summary?scope=all"
             : `/api/opening-funds/summary?bookId=${selected.id}`;
-        const assetRes = await fetch(assetUrl);
-        const assetData = await parseJson<{ assets?: AssetItem[]; total?: number }>(assetRes);
+        const assetRes = await fetch(assetUrl, { cache: "no-store" });
+        const assetData = assetRes.ok ? await parseJson<{ assets?: AssetItem[]; total?: number }>(assetRes) : null;
         const openingFundTotal = Number(assetData?.total ?? 0);
 
         setSummary({
@@ -188,7 +199,8 @@ export default function DashboardPage() {
             .sort((a, b) => b.date.localeCompare(a.date))
             .slice(0, 8),
         );
-        setAssetBreakdown(assetData?.assets ?? []);
+        const baseAssets = assetData?.assets ?? [];
+        setAssetBreakdown(applyFlowToAssets(baseAssets, monthBalance));
       } catch {
         setSummary({ ...emptySummary });
         setBreakdown([]);

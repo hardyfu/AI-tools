@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { ensureSeedData } from "@/lib/bootstrap";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   const { familyBook, childBook } = await ensureSeedData();
   const params = request.nextUrl.searchParams;

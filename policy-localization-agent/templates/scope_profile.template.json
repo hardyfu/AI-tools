@@ -1,0 +1,47 @@
+{
+  "case_metadata": {
+    "case_name": "unknown",
+    "case_directory": "cases/<case_name>",
+    "request_date": "unknown",
+    "request_owner": "unknown",
+    "status": "intake_in_progress"
+  },
+  "localization_scope": {
+    "target_country_or_region": "unknown",
+    "target_business_unit": "unknown",
+    "target_team": "unknown",
+    "target_audience": "unknown",
+    "primary_language": "unknown"
+  },
+  "source_policy": {
+    "document_title": "unknown",
+    "document_version": "unknown",
+    "document_owner": "unknown",
+    "source_file_path_or_reference": "unknown"
+  },
+  "business_context": {
+    "localization_objective": "unknown",
+    "intended_use": "guidance_document",
+    "out_of_scope_items": [],
+    "known_operational_context": "unknown"
+  },
+  "local_requirements_context": {
+    "known_legal_or_regulatory_factors": "unknown",
+    "known_internal_constraints": "unknown",
+    "required_local_approvers": "unknown"
+  },
+  "delivery_expectations": {
+    "requested_output_format": "markdown",
+    "deadline": "unknown",
+    "urgency": "unknown",
+    "notes": "unknown"
+  },
+  "intake_quality": {
+    "critical_gaps_blocking_next_step": [],
+    "missing_information": [],
+    "open_questions": [],
+    "assumptions_confirmed_by_user": [],
+    "handoff_ready": false,
+    "handoff_notes": "unknown"
+  }
+}
