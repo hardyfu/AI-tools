@@ -1,0 +1,11 @@
+{
+  "case_name": "sample-case",
+  "status": "REGULATORY_RESEARCH_READY",
+  "intake": {},
+  "artifacts": {
+    "scope_profile": "cases/sample-case/working/scope_profile.json",
+    "parsed_controls": "cases/sample-case/working/parsed_controls.json",
+    "regulatory_context": "cases/sample-case/working/regulatory_context.json",
+    "localization_plan": "cases/sample-case/working/localization_plan.json"
+  }
+}

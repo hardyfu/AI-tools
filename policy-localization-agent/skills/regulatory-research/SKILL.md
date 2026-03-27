@@ -1,6 +1,6 @@
 ---
 name: regulatory-research
-description: Use this skill when a policy localization case needs a structured view of relevant local laws and regulations. This skill reads `scope_profile.json`, local regulation markdown files, and current web research to produce `regulatory_context.json`.
+description: Use this skill when a policy localization case needs a structured view of relevant local laws and regulations. This skill reads `scope_profile.json`, optional local regulation markdown files, and Tavily MCP-based web research to produce `regulatory_context.json`.
 ---
 
 # Regulatory Research
@@ -15,16 +15,18 @@ Identify and structure the local legal and regulatory context relevant to the ca
 
 - `cases/<case_name>/working/scope_profile.json`
 - `cases/<case_name>/input/local_regulations/*.md` when available
-- current web research on relevant local laws or regulations
+- Tavily MCP-based web research on relevant local laws or regulations
 
 ## Output
 
 - `cases/<case_name>/working/regulatory_context.json`
+- `cases/<case_name>/working/regulatory_research.md`
+- `scripts/agent02_runner.py` is the skill-specific executor
 
 ## Rules
 
 - Use `scope_profile.json` to determine jurisdiction, case context, and research scope.
-- Web research is the default discovery mechanism.
+- Tavily MCP-based web research is the default discovery mechanism.
 - Local regulation markdown files are optional supporting inputs.
 - Generate research topics and queries from the scope instead of broad unspecific searching.
 - Use local regulation markdown files when provided.
@@ -33,13 +35,15 @@ Identify and structure the local legal and regulatory context relevant to the ca
 - Do not make localization implementation decisions.
 - Do not present uncertain legal interpretation as settled fact.
 - Keep the output structured and traceable.
+- Validation runtime execution requires Tavily MCP to be available through the Codex validation host.
+- The Python orchestrator may satisfy this by launching a local Tavily MCP stdio client.
 
 ## Procedure
 
 1. Load `scope_profile.json`.
 2. Derive research topics and search queries from the case scope.
 3. Load all available markdown files from `input/local_regulations/` when present.
-4. Use web research to discover, verify, or supplement current local requirements.
+4. Use Tavily MCP-based web research to discover, verify, or supplement current local requirements.
 5. Write `regulatory_context.json` with:
    - jurisdiction
    - research date
@@ -47,6 +51,7 @@ Identify and structure the local legal and regulatory context relevant to the ca
    - relevant obligations
    - relevance topics or related control domains
    - uncertainty and open questions
+6. Call `runtime/search_results_to_markdown.py` to save a Markdown research note file in `cases/<case_name>/working/`.
 
 ## Quality Bar
 
@@ -74,3 +79,9 @@ If sources disagree:
 
 - preserve the conflict in the output
 - do not silently resolve it
+
+## Runtime Note
+
+- Preferred validation host: Codex validation thread
+- Preferred regulatory search integration: Tavily MCP
+- Local HTTP API code may be used only as a development fallback

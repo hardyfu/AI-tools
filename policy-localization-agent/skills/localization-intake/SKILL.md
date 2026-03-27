@@ -20,6 +20,7 @@ Create a complete enough `scope_profile.json` for downstream work without assumi
 ## Output
 
 - `scope_profile.json`
+- `scripts/intake_helpers.py` contains the deterministic intake helper logic used by the orchestrator
 
 ## Rules
 
@@ -30,6 +31,8 @@ Create a complete enough `scope_profile.json` for downstream work without assumi
 - Ask no more than 5 questions in one turn.
 - Prioritize the highest-impact missing fields first.
 - Establish a stable `case_name` before finalizing the handoff artifact.
+- Do not create the final `scope_profile.json` from the user's initial request alone.
+- Ask intake questions first, receive user answers, and only then finalize the artifact.
 - Never fabricate policy, jurisdiction, organizational, or deadline details.
 - Mark unresolved values as `"unknown"`.
 - Allow conservative inference when a value is strongly supported by the user's context, but label it as `inferred`.
@@ -37,39 +40,45 @@ Create a complete enough `scope_profile.json` for downstream work without assumi
 
 ## Procedure
 
-1. Summarize the current understanding in a short, explicit block.
-2. Ask the user to confirm or correct that summary.
-3. Stage 1: ask only 3-4 critical questions for the highest-impact missing fields. Typical priorities are:
+1. First response requirements:
+   - provide a short understanding summary
+   - ask 3-4 critical intake questions
+   - explicitly say that the final `scope_profile.json` will be created only after the user answers
+   - do not create the final artifact yet
+2. Summarize the current understanding in a short, explicit block.
+3. Ask the user to confirm or correct that summary.
+4. Stage 1: ask only 3-4 critical questions for the highest-impact missing fields. Typical priorities are:
    - source policy identity
    - target team or business unit
    - exact jurisdiction or scope boundary
    - localization objective
-4. Record the user's answers and classify each captured field as:
+5. Record the user's answers and classify each captured field as:
    - `confirmed`
    - `inferred`
    - `unknown`
-5. Stage 2: ask follow-up questions based on the user's answers.
-6. Stage 3: check completeness and decide whether to continue asking questions.
-7. Continue iteratively until the information is sufficient for a usable intake artifact or the remaining gaps are explicitly marked as `unknown`.
-8. In each round:
+6. Stage 2: ask follow-up questions based on the user's answers.
+7. Stage 3: check completeness and decide whether to continue asking questions.
+8. Continue iteratively until the information is sufficient for a usable intake artifact or the remaining gaps are explicitly marked as `unknown`.
+9. In each round:
    - avoid asking too many questions at once
    - prioritize the highest-impact remaining gaps
    - do not assume the process ends after two rounds
-9. For every missing or unconfirmed field:
+10. For every missing or unconfirmed field:
    - set the value to `"unknown"`
    - include the field in `missing_information`
    - add a concrete follow-up in `open_questions` if the gap matters
-10. If a value is inferred:
+11. If a value is inferred:
    - keep the inferred value
    - label it as `inferred`
    - surface it for confirmation before treating it as settled
-11. Produce `scope_profile.json` from the template.
-12. Write the artifact to `cases/<case_name>/working/scope_profile.json`.
-13. If the source policy file path is known, record it in `source_policy.source_file_path_or_reference`.
-14. Tell the user where to place:
+12. Do not produce the final `scope_profile.json` until the intake questions have been asked and the user has answered them.
+13. Produce `scope_profile.json` from the template.
+14. Write the artifact to `cases/<case_name>/working/scope_profile.json`.
+15. If the source policy file path is known, record it in `source_policy.source_file_path_or_reference`.
+16. Tell the user where to place:
    - the markdown global policy file for Agent01
    - the markdown local law and regulation files for Agent02
-15. Stop after intake. Do not parse the policy or draft guidance.
+17. Stop after intake. Do not parse the policy or draft guidance.
 
 ## Quality Bar
 

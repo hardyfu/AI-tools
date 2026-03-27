@@ -20,12 +20,16 @@ Determine how each parsed global control should be applied in the local context,
 ## Output
 
 - `cases/<case_name>/working/localization_plan.json`
+- `scripts/agent03_runner.py` is the skill-specific executor
 
 ## Rules
 
 - Use `scope_profile.json` as context, not as a replacement for policy content.
 - Use `parsed_controls.json` as the control inventory.
 - Use `regulatory_context.json` as the local law and regulation input.
+- Read inputs only from the shared case directory structure.
+- Require all expected input files to exist before starting decision work.
+- If a required input file is missing, stop and surface the missing dependency.
 - Preserve original control intent unless a local requirement clearly justifies adaptation.
 - Keep one localization decision item per parsed control.
 - Do not write the final guidance document.
@@ -36,21 +40,24 @@ Determine how each parsed global control should be applied in the local context,
 ## Procedure
 
 1. Load `scope_profile.json`.
-2. Load `parsed_controls.json`.
-3. Load `regulatory_context.json`.
-4. For each parsed control, decide whether it is:
+2. Confirm that `parsed_controls.json` and `regulatory_context.json` exist in the same case `working/` directory.
+3. Load `parsed_controls.json`.
+4. Load `regulatory_context.json`.
+5. For each parsed control, decide whether it is:
    - `adopt`
    - `adapt`
    - `supplement`
    - `flag`
-5. Write `localization_plan.json` with one decision item per control.
+6. Write `localization_plan.json` with one decision item per control.
 
 ## Decision Item Rules
 
 Every localization decision item must include:
 
 - control traceability
+- original requirement text and source section
 - decision type
+- decision summary
 - local applicability
 - rationale
 - supporting local references
@@ -76,6 +83,10 @@ A good localization design result is:
 ## Guardrails
 
 If `regulatory_context.json` is missing:
+
+- stop and surface the missing dependency
+
+If `parsed_controls.json` is missing:
 
 - stop and surface the missing dependency
 

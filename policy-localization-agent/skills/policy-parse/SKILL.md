@@ -19,12 +19,14 @@ Convert a policy markdown file into a stable JSON list of control items with sou
 ## Output
 
 - `working/parsed_controls.json`
+- `scripts/agent01_runner.py` is the skill-specific executor
 
 ## Rules
 
 - Always use the provided `policy_file_path`.
 - Derive the case directory from the provided `policy_file_path`.
 - Always read `scope_profile.json` from the same case `working/` directory.
+- If the provided policy file is a PDF, convert it to Markdown first and save it in `cases/<case_name>/input/global_policy/`.
 - Use scope information for context only. Do not override policy text.
 - If `scope_profile.json.source_policy.source_file_path_or_reference` is known, validate it against `policy_file_path`.
 - If the paths do not match, stop and surface a handoff mismatch.
@@ -37,17 +39,18 @@ Convert a policy markdown file into a stable JSON list of control items with sou
 
 ## Procedure
 
-1. Load the markdown policy file.
-2. Derive the case directory from `policy_file_path`.
-3. Load `cases/<case_name>/working/scope_profile.json`.
-4. If `source_policy.source_file_path_or_reference` is known, validate it against `policy_file_path`.
-5. Walk the document by headings and requirement boundaries.
-6. Use headings as hints for `control_domain`.
-7. Treat bullets or requirement sentences as candidate control boundaries.
-8. Create one control item per distinct requirement.
-9. Preserve traceability with `source_section` and `source_text`.
-10. If a field is unavailable, use the schema default such as `"unknown"` or `""`.
-11. Write `cases/<case_name>/working/parsed_controls.json` using the template structure.
+1. Derive the case directory from `policy_file_path`.
+2. If the provided policy file is a PDF, call `runtime/pdf_to_markdown.py` and save the converted Markdown in `cases/<case_name>/input/global_policy/`.
+3. Load the markdown policy file.
+4. Load `cases/<case_name>/working/scope_profile.json`.
+5. If `source_policy.source_file_path_or_reference` is known, validate it against `policy_file_path`.
+6. Walk the document by headings and requirement boundaries.
+7. Use headings as hints for `control_domain`.
+8. Treat bullets or requirement sentences as candidate control boundaries.
+9. Create one control item per distinct requirement.
+10. Preserve traceability with `source_section` and `source_text`.
+11. If a field is unavailable, use the schema default such as `"unknown"` or `""`.
+12. Write `cases/<case_name>/working/parsed_controls.json` using the template structure.
 
 ## Control Item Rules
 
