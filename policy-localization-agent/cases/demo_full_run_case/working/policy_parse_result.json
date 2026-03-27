@@ -1,0 +1,12 @@
+{
+  "case_name": "demo_full_run_case",
+  "source_policy_path": "cases/demo_full_run_case/input/global_policy/Cloud Security Standard.pdf",
+  "scope_profile_path": "cases/demo_full_run_case/working/scope_profile.json",
+  "normalized_markdown_path": "cases/demo_full_run_case/input/global_policy/Cloud_Security_Standard.normalized.md",
+  "source_format": "pdf",
+  "normalization_mode": "pdf_to_markdown",
+  "normalization_warnings": [
+    "Input markdown appears to be page-oriented PDF extraction rather than native markdown."
+  ],
+  "notes": "Policy parse completed as normalization only. No control extraction was performed."
+}

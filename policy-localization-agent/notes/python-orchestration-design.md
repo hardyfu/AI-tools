@@ -15,17 +15,11 @@ The Python orchestrator is the source of truth for:
 
 The LLM is used only inside controlled step executors.
 
-## Core Design Shift
-
-Old model:
-
-- AI reads `gateway.md`
-- AI decides what to do next
-
-New model:
+## Execution Model
 
 - Python enforces workflow logic
-- AI executes one bounded skill at a time
+- The orchestrator resolves and runs one bounded skill at a time
+- LLM use is limited to the skill steps that require it
 
 ## System Layers
 
@@ -34,6 +28,11 @@ New model:
 Main entrypoint:
 
 - `policy_localization.py`
+
+Execution modes:
+
+- `run`: orchestrated workflow mode
+- `--action ...`: step-by-step debugging mode
 
 Responsibilities:
 
@@ -49,10 +48,11 @@ Responsibilities:
 
 Retain skill docs as behavior specifications:
 
-- `skills/localization-intake/SKILL.md`
-- `skills/policy-parse/SKILL.md`
-- `skills/regulatory-research/SKILL.md`
-- `skills/localization-design/SKILL.md`
+- `skills/localization_intake/SKILL.md`
+- `skills/policy_parse/SKILL.md`
+- `skills/regulatory_research/SKILL.md`
+- `skills/requirements_integration/SKILL.md`
+- `skills/localization_design/SKILL.md`
 
 These documents define what each step should do, but Python decides when each step runs.
 
@@ -66,18 +66,20 @@ Reusable scripts remain in `runtime/`:
 
 Fallback runners may remain for development:
 
-- `skills/policy-parse/scripts/agent01_runner.py`
-- `skills/regulatory-research/scripts/agent02_runner.py`
-- `skills/localization-design/scripts/agent03_runner.py`
+- `skills/policy_parse/scripts/agent01_runner.py`
+- `skills/regulatory_research/scripts/agent02_runner.py`
+- `skills/requirements_integration/scripts/agent04_runner.py`
+- `skills/localization_design/scripts/agent03_runner.py`
 
 ### 4. Artifacts
 
 Artifacts remain the workflow interface between steps:
 
 - `scope_profile.json`
-- `parsed_controls.json`
+- normalized global policy Markdown
 - `regulatory_context.json`
-- `localization_plan.json`
+- `integrated_requirements.md`
+- `localized_standard_draft.md`
 
 ## Shared Case Structure
 
@@ -127,7 +129,7 @@ Important:
 
 Purpose:
 
-- parse the global policy
+- normalize the global policy source into Markdown
 
 Inputs:
 
@@ -137,12 +139,11 @@ Inputs:
 Supporting tools:
 
 - `pdf_to_markdown.py` when source is PDF
-- `ollama_client.py` for policy parsing reasoning
 
 Outputs:
 
-- converted Markdown in `input/global_policy/` if needed
-- `working/parsed_controls.json`
+- normalized Markdown in `input/global_policy/`
+- `working/policy_parse_result.json`
 
 Suggested orchestrator action:
 
@@ -178,21 +179,44 @@ Suggested orchestrator action:
 
 - `agent02_run`
 
-### Phase 4 - Agent03 Skill
+### Phase 4 - Agent04 Skill
 
 Purpose:
 
-- create localization decisions
+- integrate group requirements with local legal requirements
 
 Inputs:
 
 - `working/scope_profile.json`
-- `working/parsed_controls.json`
+- normalized global policy Markdown
 - `working/regulatory_context.json`
 
 Outputs:
 
-- `working/localization_plan.json`
+- `working/integrated_requirements.md`
+
+Supporting tools:
+
+- `ollama_client.py`
+
+Suggested orchestrator action:
+
+- `agent04_run`
+
+### Phase 5 - Agent03 Skill
+
+Purpose:
+
+- draft the localized standard document
+
+Inputs:
+
+- `working/scope_profile.json`
+- `working/integrated_requirements.md`
+
+Outputs:
+
+- `working/localized_standard_draft.md`
 
 Supporting tools:
 
@@ -215,6 +239,7 @@ Suggested statuses:
 - `POLICY_PARSE_COMPLETE`
 - `REGULATORY_RESEARCH_READY`
 - `REGULATORY_RESEARCH_COMPLETE`
+- `REQUIREMENTS_INTEGRATION_READY`
 - `LOCALIZATION_DESIGN_READY`
 - `LOCALIZATION_DESIGN_COMPLETE`
 - `BLOCKED`
@@ -264,11 +289,11 @@ Recommended LLM integration:
 
 Implementation note:
 
-- Agent01 should prefer Ollama-backed parsing.
 - Agent02 should prefer Tavily MCP plus Ollama-backed synthesis, with the Tavily HTTP API used only as a development fallback.
 - Agent02 should prompt the operator for a Tavily API key at run time unless a different secure secret-handling mechanism is introduced later.
 - Agent03 should use Ollama-backed localization design, with a local fallback only for development testing.
 - A local deterministic fallback may remain for development, but it is not the intended primary behavior.
+- In orchestrated `run` mode, Agent01 should fail loudly instead of silently using the local rule fallback.
 
 ## Recommended Next Implementation
 

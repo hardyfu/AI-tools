@@ -1,0 +1,49 @@
+{
+  "case_metadata": {
+    "case_name": "demo_full_run_case",
+    "case_directory": "cases/demo_full_run_case",
+    "global_policy_input_directory": "cases/demo_full_run_case/input/global_policy",
+    "local_regulations_input_directory": "cases/demo_full_run_case/input/local_regulations",
+    "request_date": "unknown",
+    "request_owner": "China information system manager",
+    "status": "intake_complete"
+  },
+  "localization_scope": {
+    "target_country_or_region": "China mainland",
+    "target_business_unit": "unknown",
+    "target_team": "infra and dev team",
+    "target_audience": "infra and dev team",
+    "primary_language": "Chinese"
+  },
+  "source_policy": {
+    "document_title": "Cloud Security Standard",
+    "document_version": "unknown",
+    "document_owner": "unknown",
+    "source_file_path_or_reference": "unknown"
+  },
+  "business_context": {
+    "localization_objective": "a guideline for compliance with both group policy and local regulations",
+    "intended_use": "guidance_document",
+    "out_of_scope_items": [],
+    "known_operational_context": "unknown"
+  },
+  "local_requirements_context": {
+    "known_legal_or_regulatory_factors": "unknown",
+    "known_internal_constraints": "unknown",
+    "required_local_approvers": "unknown"
+  },
+  "delivery_expectations": {
+    "requested_output_format": "markdown",
+    "deadline": "unknown",
+    "urgency": "unknown",
+    "notes": "unknown"
+  },
+  "intake_quality": {
+    "critical_gaps_blocking_next_step": [],
+    "missing_information": [],
+    "open_questions": [],
+    "assumptions_confirmed_by_user": [],
+    "handoff_ready": true,
+    "handoff_notes": "Agent00 intake completed through Python orchestrator."
+  }
+}

@@ -1,5 +1,6 @@
 import json
 import os
+import select
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -35,11 +36,13 @@ class TavilyMCPClient:
         command: list[str] | None = None,
         api_key: str | None = None,
         protocol_version: str = DEFAULT_PROTOCOL_VERSION,
+        read_timeout: float = 15.0,
     ) -> None:
         load_env_file()
         self.command = command or ["npx", "-y", "tavily-mcp@0.1.3"]
         self.api_key = api_key or os.environ.get("TAVILY_API_KEY")
         self.protocol_version = protocol_version
+        self.read_timeout = read_timeout
         if not self.api_key:
             raise TavilyMCPError("Missing TAVILY_API_KEY environment variable for Tavily MCP.")
         self._process: subprocess.Popen[bytes] | None = None
@@ -82,6 +85,9 @@ class TavilyMCPClient:
 
         headers: dict[str, str] = {}
         while True:
+            ready, _, _ = select.select([self._process.stdout], [], [], self.read_timeout)
+            if not ready:
+                raise TavilyMCPError("Timed out waiting for Tavily MCP response headers.")
             line = self._process.stdout.readline()
             if not line:
                 stderr = b""
@@ -106,6 +112,9 @@ class TavilyMCPClient:
         except KeyError as exc:
             raise TavilyMCPError(f"Missing Content-Length header in Tavily MCP response: {headers}") from exc
 
+        ready, _, _ = select.select([self._process.stdout], [], [], self.read_timeout)
+        if not ready:
+            raise TavilyMCPError("Timed out waiting for Tavily MCP response body.")
         payload = self._process.stdout.read(length)
         return json.loads(payload.decode("utf-8"))
 
@@ -185,19 +194,23 @@ class TavilyMCPClient:
         max_results: int = 5,
         search_depth: str = "advanced",
         include_raw_content: bool = False,
+        include_domains: list[str] | None = None,
     ) -> dict[str, Any]:
+        arguments: dict[str, Any] = {
+            "query": query,
+            "topic": topic,
+            "max_results": max_results,
+            "search_depth": search_depth,
+            "include_raw_content": include_raw_content,
+        }
+        if include_domains:
+            arguments["include_domains"] = include_domains
         tool_name = self._resolve_search_tool_name()
         result = self._request(
             "tools/call",
             {
                 "name": tool_name,
-                "arguments": {
-                    "query": query,
-                    "topic": topic,
-                    "max_results": max_results,
-                    "search_depth": search_depth,
-                    "include_raw_content": include_raw_content,
-                },
+                "arguments": arguments,
             },
         )
         content = result.get("content")

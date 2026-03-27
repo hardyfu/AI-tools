@@ -1,0 +1,23 @@
+{
+  "intake_round": 2,
+  "awaiting_user_answers": false,
+  "asked_questions": [
+    "What is the title of the global policy or standard?",
+    "Which country or region is this localization for?",
+    "Who is the target team or audience?",
+    "What practical outcome should the localized document help them achieve?"
+  ],
+  "pending_questions": [],
+  "last_intake_summary": "I want to localize a global cloud security policy for China for local internal users.",
+  "answer_history": [
+    {
+      "policy_title": "Cloud Security Standard",
+      "jurisdiction": "China mainland",
+      "audience": "infra and dev team",
+      "objective": "a guideline for compliance with both group policy and local regulations",
+      "request_owner": "China information system manager",
+      "primary_language": "Chinese"
+    }
+  ],
+  "finalized": true
+}

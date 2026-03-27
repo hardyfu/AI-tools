@@ -1,0 +1,4 @@
+interface:
+  display_name: "Regulatory Research"
+  short_description: "Research local laws and regulations"
+  default_prompt: "Use $regulatory-research to search laws and regulations by policy title and jurisdiction, then capture the relevant regulatory content in structured and Markdown outputs."

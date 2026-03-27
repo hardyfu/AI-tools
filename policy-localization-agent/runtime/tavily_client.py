@@ -2,8 +2,16 @@ import json
 import os
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+
+try:
+    import requests
+except ModuleNotFoundError:  # pragma: no cover - dependency guard
+    requests = None
+
+try:
+    import certifi
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    certifi = None
 
 
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
@@ -45,6 +53,7 @@ class TavilyClient:
         max_results: int = 5,
         search_depth: str = "advanced",
         include_raw_content: bool = False,
+        include_domains: list[str] | None = None,
     ) -> dict[str, Any]:
         payload = {
             "api_key": self.api_key,
@@ -54,17 +63,17 @@ class TavilyClient:
             "search_depth": search_depth,
             "include_raw_content": include_raw_content,
         }
-        request = Request(
-            TAVILY_SEARCH_URL,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+        if include_domains:
+            payload["include_domains"] = include_domains
+        if requests is None:
+            raise TavilyClientError("Missing Python dependency: requests. Install it before using Tavily HTTP fallback.")
         try:
-            with urlopen(request, timeout=self.timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise TavilyClientError(f"Tavily HTTP error {exc.code}: {detail}") from exc
-        except URLError as exc:
+            verify = certifi.where() if certifi is not None else True
+            response = requests.post(TAVILY_SEARCH_URL, json=payload, timeout=self.timeout, verify=verify)
+            response.raise_for_status()
+            return response.json()
+        except requests.HTTPError as exc:
+            detail = exc.response.text if exc.response is not None else str(exc)
+            raise TavilyClientError(f"Tavily HTTP error: {detail}") from exc
+        except requests.RequestException as exc:
             raise TavilyClientError(f"Tavily connection error: {exc}") from exc

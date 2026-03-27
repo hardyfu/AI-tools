@@ -26,9 +26,11 @@ def render_markdown(data: dict[str, Any]) -> str:
         link = source.get("source_link_or_reference", "unknown")
         relevance = source.get("relevance", "unknown")
         origin = source.get("source_origin", "unknown")
+        excerpt = source.get("content_excerpt", "unknown")
         lines.append(f"- {title} ({origin})")
         lines.append(f"  - Reference: {link}")
         lines.append(f"  - Relevance: {relevance}")
+        lines.append(f"  - Content excerpt: {excerpt}")
 
     lines.extend(["", "## Relevant Obligations", ""])
     for item in data.get("relevant_obligations", []):

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Localized Standard Draft"
+  short_description: "Draft a localized standard document"
+  default_prompt: "Use $localization-design to draft the final localized standard document from scope and integrated requirements using the fixed standard-document structure."

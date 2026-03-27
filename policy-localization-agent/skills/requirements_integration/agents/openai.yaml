@@ -1,0 +1,4 @@
+interface:
+  display_name: "Requirements Integration"
+  short_description: "Integrate group and local requirements"
+  default_prompt: "Use $requirements-integration to integrate normalized global policy requirements with local regulatory requirements before drafting the localized standard."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Localization Intake"
+  short_description: "Clarify scope and create intake artifact"
+  default_prompt: "Use $localization-intake to clarify scope, collect confirmed requirements, and create the intake artifact before any downstream work."

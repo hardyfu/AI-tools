@@ -1,0 +1,4 @@
+interface:
+  display_name: "Policy Normalize"
+  short_description: "Normalize a global policy into Markdown"
+  default_prompt: "Use $policy-parse to normalize the source global policy into case-local Markdown without extracting control items."
