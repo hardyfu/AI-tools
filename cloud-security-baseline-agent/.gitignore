@@ -1,5 +1,5 @@
 __pycache__/
 *.pyc
-tmp_demo/
+.DS_Store
 cases/*/input/
 cases/*/working/

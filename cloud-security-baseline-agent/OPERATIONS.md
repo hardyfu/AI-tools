@@ -4,16 +4,27 @@
 
 This project converts:
 
-- one organizational cloud security policy
-- one third-party benchmark or standard
+- one Global Policy document
+- one Third-Party Standard document
 
 into a production baseline package for Alibaba Cloud.
 
 The workflow is split into three stages:
 
 1. `skill01`: parse source documents into structured JSON artifacts
-2. `skill02`: classify mappings and generate baseline analysis artifacts
+2. `skill02`: classify mappings and generate Baseline Analysis artifacts
 3. `skill03`: generate the final production workbook `final_baseline.xlsx`
+
+The active skill set under `skills/` is:
+
+- `skill01_document_parse`
+- `skill02_baseline_generation`
+- `skill03_baseline_finalize`
+- `baseline_writer`
+
+Historical content that is no longer part of the runtime path is kept under:
+
+- `archive/`
 
 ## Case Layout
 
@@ -52,8 +63,8 @@ Interactive mode options:
 ```bash
 1. Open GUI
 2. Bootstrap case
-3. Stage global policy
-4. Stage third-party standard
+3. Stage Global Policy
+4. Stage Third-Party Standard
 5. Run case pipeline
 6. Validate single case
 7. Validate all cases
@@ -115,12 +126,12 @@ Buttons:
 
 - `New Instance`
   - prompts for `case_name`
-  - prompts for one global policy file
-  - prompts for one third-party standard file
+  - prompts for one Global Policy file
+  - prompts for one Third-Party Standard file
   - automatically runs:
     - `bootstrap`
-    - `stage-input` for global policy
-    - `stage-input` for third-party standard
+    - `stage-input` for Global Policy
+    - `stage-input` for Third-Party Standard
     - `run`
   - copies `final_baseline.xlsx` to `~/Downloads/<case_name>-final_baseline.xlsx`
   - reports the download path in the top log panel
@@ -136,8 +147,8 @@ Buttons:
 For a new case:
 
 1. Run `bootstrap`
-2. Stage one organizational policy document
-3. Stage one third-party benchmark document
+2. Stage one Global Policy document
+3. Stage one Third-Party Standard document
 4. Run `run`
 5. Run `validate-case`
 
@@ -159,7 +170,7 @@ This project treats output format as a strict contract, not a best-effort sugges
 
 ### Skill02 contract
 
-- Every benchmark requirement must produce exactly one classified mapping row
+- Every Third-Party Standard requirement must produce exactly one classified mapping row
 - `baseline_action` is restricted to:
   - `carry_forward`
   - `adapt_for_platform`
@@ -179,7 +190,7 @@ This project treats output format as a strict contract, not a best-effort sugges
 
 ## Final Workbook
 
-The final workbook contains exactly these sheets:
+The Final Baseline Workbook contains exactly these sheets:
 
 1. `Summary`
 2. `Document Sections`
@@ -211,3 +222,4 @@ If validation fails, the command exits non-zero and reports the failing case or 
   - `/Users/ryan/Desktop/pythoncode/.venv`
 - Online model access is required for full `run`
 - Validation commands are safe to use when you only want production acceptance checks
+- `archive/` contains historical skills, retired templates, demo scraps, and build intermediates that are not part of the active runtime path

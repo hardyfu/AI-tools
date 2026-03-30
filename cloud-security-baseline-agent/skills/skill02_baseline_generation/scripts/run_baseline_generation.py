@@ -9,9 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from runtime.document_pipeline import (
-    choose_best_global_match,
     choose_top_global_matches,
-    classify_baseline_action,
     llm_classify_baseline_actions,
     load_json,
     write_json,
@@ -27,6 +25,8 @@ ACTION_TO_DECISION = {
     "new_baseline_control": "gap",
 }
 VALID_DECISIONS = set(ACTION_TO_DECISION.values())
+VALID_COVERAGE_STATUSES = {"covered", "partially_covered", "not_addressed_by_benchmark", "organization_specific"}
+VALID_EXTENSION_TYPES = {"platform_specific_detail", "implementation_enrichment", "stronger_control", "new_control_area"}
 
 
 def _validate_mapping_item(item: dict, global_requirement_ids: set[str]) -> None:
@@ -151,6 +151,233 @@ def _validate_compatibility_analysis(compatibility_analysis: dict, analysis: dic
         raise RuntimeError(f"skill02 compatibility summary mismatch: expected {expected_summary}, got {summary}")
 
 
+def _is_org_specific_requirement(global_item: dict) -> bool:
+    text = " ".join(
+        [
+            str(global_item.get("statement", "")),
+            str(global_item.get("section", "")),
+            str(global_item.get("source_excerpt", "")),
+        ]
+    ).lower()
+    org_specific_markers = [
+        "abb",
+        "azure active directory",
+        "active directory",
+        "abb-managed",
+        "abbmanaged",
+        "jump server",
+        "pam solution",
+        "internal",
+        "organization",
+    ]
+    return any(marker in text for marker in org_specific_markers)
+
+
+def _build_standard_coverage(
+    *,
+    global_requirements: list[dict],
+    baseline_mapping: list[dict],
+) -> list[dict[str, object]]:
+    matched_by_global_id: dict[str, list[dict]] = {}
+    for item in baseline_mapping:
+        matched = item.get("matched_global_policy_requirement")
+        if not isinstance(matched, dict):
+            continue
+        requirement_id = str(matched.get("requirement_id", "")).strip()
+        if not requirement_id:
+            continue
+        matched_by_global_id.setdefault(requirement_id, []).append(item)
+
+    coverage_rows: list[dict[str, object]] = []
+    for global_item in global_requirements:
+        global_id = str(global_item.get("requirement_id", "")).strip()
+        matched_rows = matched_by_global_id.get(global_id, [])
+        if any(row.get("decision") == "aligned" for row in matched_rows):
+            coverage_status = "covered"
+        elif any(row.get("decision") == "partial" for row in matched_rows):
+            coverage_status = "partially_covered"
+        elif _is_org_specific_requirement(global_item):
+            coverage_status = "organization_specific"
+        else:
+            coverage_status = "not_addressed_by_benchmark"
+
+        matched_benchmark_requirements = [
+            {
+                "requirement_id": row["third_party_requirement"].get("requirement_id", ""),
+                "source_requirement_id": row["third_party_requirement"].get("source_requirement_id", ""),
+                "section": row["third_party_requirement"].get("section", ""),
+                "statement": clean_statement_noise(str(row["third_party_requirement"].get("statement", ""))),
+                "decision": row.get("decision", ""),
+            }
+            for row in matched_rows
+        ]
+        if matched_rows:
+            coverage_rationale = clean_statement_noise(
+                " | ".join(str(row.get("rationale", "")).strip() for row in matched_rows if str(row.get("rationale", "")).strip())
+            )
+        elif coverage_status == "organization_specific":
+            coverage_rationale = "This Global Standard requirement appears organization-specific and is not expected to have a direct benchmark counterpart."
+        else:
+            coverage_rationale = "No benchmark requirement was matched to this Global Standard requirement."
+
+        coverage_rows.append(
+            {
+                "global_requirement_id": global_id,
+                "global_source_requirement_id": str(global_item.get("source_requirement_id", "")).strip(),
+                "global_section": str(global_item.get("section", "")).strip(),
+                "global_statement": clean_statement_noise(str(global_item.get("statement", ""))),
+                "category": str(global_item.get("category", "")).strip(),
+                "priority": str(global_item.get("priority", "")).strip(),
+                "service": str(global_item.get("service", "")).strip(),
+                "matched_benchmark_requirements": matched_benchmark_requirements,
+                "coverage_status": coverage_status,
+                "coverage_rationale": coverage_rationale,
+            }
+        )
+    return coverage_rows
+
+
+def _infer_extension_type(item: dict) -> str:
+    benchmark = item.get("third_party_requirement", {})
+    candidate_matches = item.get("candidate_matches", [])
+    benchmark_service = str(benchmark.get("service", "")).strip()
+    statement = str(benchmark.get("statement", "")).lower()
+
+    if item.get("decision") == "partial":
+        return "platform_specific_detail"
+    if benchmark_service and benchmark_service != "general":
+        return "platform_specific_detail"
+    if candidate_matches:
+        top_score = candidate_matches[0].get("match_score")
+        if top_score is not None and float(top_score) >= 0.45:
+            if any(token in statement for token in ["must", "ensure", "required", "enabled", "rotated", "minimum length", "mfa"]):
+                return "stronger_control"
+            return "implementation_enrichment"
+    return "new_control_area"
+
+
+def _candidate_priority(source_requirement_id: str) -> str:
+    try:
+        major, minor = source_requirement_id.split(".", 1)
+    except ValueError:
+        return "P2"
+    if major == "1" and minor in {"1", "2", "3", "4", "15", "16"}:
+        return "P0"
+    if major in {"3", "5", "6", "7", "8"} and minor in {"2", "5", "7", "9"}:
+        return "P0"
+    if major in {"1", "2", "3", "4", "5", "6", "7", "8"}:
+        return "P1"
+    return "P2"
+
+
+def _build_benchmark_extensions(baseline_mapping: list[dict]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for item in baseline_mapping:
+        if item.get("decision") == "aligned":
+            continue
+        benchmark = item.get("third_party_requirement", {})
+        related_globals = []
+        for candidate in item.get("candidate_matches", []):
+            matched = candidate.get("matched_global_policy_requirement", {})
+            requirement_id = str(matched.get("requirement_id", "")).strip()
+            if not requirement_id:
+                continue
+            related_globals.append(
+                {
+                    "global_requirement_id": requirement_id,
+                    "global_source_requirement_id": str(matched.get("source_requirement_id", "")).strip(),
+                    "global_statement": clean_statement_noise(str(matched.get("statement", ""))),
+                    "match_score": candidate.get("match_score"),
+                }
+            )
+        extension_type = _infer_extension_type(item)
+        rows.append(
+            {
+                "benchmark_requirement_id": str(benchmark.get("requirement_id", "")).strip(),
+                "benchmark_source_requirement_id": str(benchmark.get("source_requirement_id", "")).strip(),
+                "benchmark_section": str(benchmark.get("section", "")).strip(),
+                "benchmark_statement": clean_statement_noise(str(benchmark.get("statement", ""))),
+                "category": str(benchmark.get("category", "")).strip(),
+                "service": str(benchmark.get("service", "")).strip(),
+                "decision": str(item.get("decision", "")).strip(),
+                "baseline_action": str(item.get("baseline_action", "")).strip(),
+                "related_global_requirements": related_globals,
+                "extension_type": extension_type,
+                "extension_rationale": clean_statement_noise(str(item.get("rationale", ""))),
+                "baseline_candidate": True,
+                "candidate_priority": _candidate_priority(str(benchmark.get("source_requirement_id", "")).strip()),
+            }
+        )
+    return rows
+
+
+def _build_baseline_candidates(benchmark_extensions: list[dict[str, object]]) -> list[dict[str, object]]:
+    candidates: list[dict[str, object]] = []
+    for index, item in enumerate(benchmark_extensions, start=1):
+        if not item.get("baseline_candidate"):
+            continue
+        candidates.append(
+            {
+                "candidate_id": f"BC-{index:03d}",
+                "source_benchmark_requirement_id": item.get("benchmark_requirement_id", ""),
+                "source_benchmark_source_requirement_id": item.get("benchmark_source_requirement_id", ""),
+                "proposed_control_title": clean_statement_noise(str(item.get("benchmark_statement", "")))[:120],
+                "proposed_control_statement": clean_statement_noise(str(item.get("benchmark_statement", ""))),
+                "category": item.get("category", ""),
+                "service": item.get("service", ""),
+                "candidate_priority": item.get("candidate_priority", "P2"),
+                "reason_for_inclusion": clean_statement_noise(str(item.get("extension_rationale", ""))),
+                "related_global_requirements": item.get("related_global_requirements", []),
+                "extension_type": item.get("extension_type", ""),
+            }
+        )
+    return candidates
+
+
+def _validate_harness_artifacts(
+    *,
+    standard_coverage: list[dict[str, object]],
+    benchmark_extensions: list[dict[str, object]],
+    baseline_candidates: list[dict[str, object]],
+    global_requirements: list[dict],
+    third_party_requirements: list[dict],
+) -> None:
+    if len(standard_coverage) != len(global_requirements):
+        raise RuntimeError("skill02 standard_coverage row count mismatch.")
+    seen_global_ids: set[str] = set()
+    for row in standard_coverage:
+        requirement_id = str(row.get("global_requirement_id", "")).strip()
+        if not requirement_id:
+            raise RuntimeError("skill02 standard_coverage missing global_requirement_id.")
+        if requirement_id in seen_global_ids:
+            raise RuntimeError(f"skill02 duplicate standard_coverage row: {requirement_id}")
+        seen_global_ids.add(requirement_id)
+        if str(row.get("coverage_status", "")).strip() not in VALID_COVERAGE_STATUSES:
+            raise RuntimeError(f"skill02 invalid coverage_status for {requirement_id}")
+
+    third_party_ids = {
+        str(item.get("requirement_id", "")).strip()
+        for item in third_party_requirements
+        if str(item.get("requirement_id", "")).strip()
+    }
+    candidate_source_ids: set[str] = set()
+    for row in benchmark_extensions:
+        benchmark_id = str(row.get("benchmark_requirement_id", "")).strip()
+        if not benchmark_id or benchmark_id not in third_party_ids:
+            raise RuntimeError(f"skill02 invalid benchmark_extension benchmark id: {benchmark_id}")
+        extension_type = str(row.get("extension_type", "")).strip()
+        if extension_type not in VALID_EXTENSION_TYPES:
+            raise RuntimeError(f"skill02 invalid extension_type for {benchmark_id}: {extension_type}")
+    for row in baseline_candidates:
+        candidate_id = str(row.get("candidate_id", "")).strip()
+        if not candidate_id:
+            raise RuntimeError("skill02 baseline_candidates missing candidate_id.")
+        source_id = str(row.get("source_benchmark_requirement_id", "")).strip()
+        if not source_id or source_id in candidate_source_ids:
+            raise RuntimeError(f"skill02 invalid or duplicate baseline candidate source: {source_id}")
+        candidate_source_ids.add(source_id)
+
+
 
 def _enforce_action_guards(
     third_party_item: dict,
@@ -204,7 +431,7 @@ def _enforce_action_guards(
 
     return action, selected_match, rationale
 
-def run(case_name: str) -> tuple[Path, Path, Path, Path, Path, Path]:
+def run(case_name: str) -> tuple[Path, Path, Path, Path, Path, Path, Path, Path, Path]:
     case_dir = PROJECT_ROOT / "cases" / case_name
     working_dir = case_dir / "working"
     global_path = working_dir / "global_policy_parse.json"
@@ -332,6 +559,70 @@ def run(case_name: str) -> tuple[Path, Path, Path, Path, Path, Path]:
     )
     analysis_path = working_dir / "baseline_analysis.json"
     write_json(analysis_path, analysis)
+
+    standard_coverage = _build_standard_coverage(
+        global_requirements=global_requirements,
+        baseline_mapping=baseline_mapping,
+    )
+    benchmark_extensions = _build_benchmark_extensions(baseline_mapping)
+    baseline_candidates = _build_baseline_candidates(benchmark_extensions)
+    _validate_harness_artifacts(
+        standard_coverage=standard_coverage,
+        benchmark_extensions=benchmark_extensions,
+        baseline_candidates=baseline_candidates,
+        global_requirements=global_requirements,
+        third_party_requirements=third_party_requirements,
+    )
+
+    standard_coverage_path = working_dir / "standard_coverage.json"
+    benchmark_extensions_path = working_dir / "benchmark_extensions.json"
+    baseline_candidates_path = working_dir / "baseline_candidates.json"
+    write_json(
+        standard_coverage_path,
+        {
+            "case_name": case_name,
+            "artifact_type": "standard_coverage",
+            "global_policy_parse": str(global_path.relative_to(PROJECT_ROOT)),
+            "third_party_standard_parse": str(third_party_path.relative_to(PROJECT_ROOT)),
+            "rows": standard_coverage,
+            "summary": {
+                "covered": sum(1 for row in standard_coverage if row["coverage_status"] == "covered"),
+                "partially_covered": sum(1 for row in standard_coverage if row["coverage_status"] == "partially_covered"),
+                "not_addressed_by_benchmark": sum(1 for row in standard_coverage if row["coverage_status"] == "not_addressed_by_benchmark"),
+                "organization_specific": sum(1 for row in standard_coverage if row["coverage_status"] == "organization_specific"),
+            },
+        },
+    )
+    write_json(
+        benchmark_extensions_path,
+        {
+            "case_name": case_name,
+            "artifact_type": "benchmark_extensions",
+            "rows": benchmark_extensions,
+            "summary": {
+                "total_extensions": len(benchmark_extensions),
+                "platform_specific_detail": sum(1 for row in benchmark_extensions if row["extension_type"] == "platform_specific_detail"),
+                "implementation_enrichment": sum(1 for row in benchmark_extensions if row["extension_type"] == "implementation_enrichment"),
+                "stronger_control": sum(1 for row in benchmark_extensions if row["extension_type"] == "stronger_control"),
+                "new_control_area": sum(1 for row in benchmark_extensions if row["extension_type"] == "new_control_area"),
+            },
+        },
+    )
+    write_json(
+        baseline_candidates_path,
+        {
+            "case_name": case_name,
+            "artifact_type": "baseline_candidates",
+            "rows": baseline_candidates,
+            "summary": {
+                "total_candidates": len(baseline_candidates),
+                "p0": sum(1 for row in baseline_candidates if row["candidate_priority"] == "P0"),
+                "p1": sum(1 for row in baseline_candidates if row["candidate_priority"] == "P1"),
+                "p2": sum(1 for row in baseline_candidates if row["candidate_priority"] == "P2"),
+            },
+        },
+    )
+
     debug_path = working_dir / "skill02_debug.json"
     write_json(
         debug_path,
@@ -341,6 +632,11 @@ def run(case_name: str) -> tuple[Path, Path, Path, Path, Path, Path]:
             "chunk_debug": llm_debug,
             "llm_decision_count": len(llm_decisions),
             "fallback_count": len(third_party_requirements) - len(llm_decisions),
+            "harness_artifacts": {
+                "standard_coverage": str(standard_coverage_path.relative_to(PROJECT_ROOT)),
+                "benchmark_extensions": str(benchmark_extensions_path.relative_to(PROJECT_ROOT)),
+                "baseline_candidates": str(baseline_candidates_path.relative_to(PROJECT_ROOT)),
+            },
         },
     )
 
@@ -389,7 +685,17 @@ def run(case_name: str) -> tuple[Path, Path, Path, Path, Path, Path]:
     })
 
     controls_path, report_path, recommendations_path = run_baseline_writer(case_name)
-    return analysis_path, compatibility_path, controls_path, report_path, recommendations_path, debug_path
+    return (
+        analysis_path,
+        standard_coverage_path,
+        benchmark_extensions_path,
+        baseline_candidates_path,
+        compatibility_path,
+        controls_path,
+        report_path,
+        recommendations_path,
+        debug_path,
+    )
 
 
 

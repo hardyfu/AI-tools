@@ -10,163 +10,162 @@ PROJECT_ROOT = resolve_project_root(__file__)
 from runtime.text_utils import clean_statement_noise, load_json
 
 
-P0_IDS = {
-    "1.1", "1.2", "1.3", "1.4", "1.15", "1.16",
-    "3.2", "3.5", "5.1", "5.2", "5.4", "5.7",
-    "6.1", "6.2", "6.5",
-    "7.5", "7.6", "7.7", "7.9",
-    "8.1", "8.5", "8.7",
-}
-P1_IDS = {
-    "1.5", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14",
-    "2.4", "2.5", "2.23",
-    "3.1", "3.3", "3.4",
-    "4.1", "4.3", "4.4", "4.5",
-    "5.3", "5.5", "5.6", "5.8", "5.9",
-    "6.3", "6.4", "6.6", "6.7", "6.8", "6.9",
-    "7.1", "7.2", "7.4", "7.8",
-    "8.3", "8.4", "8.6",
-}
+def _render_global_refs(refs: list[dict[str, Any]]) -> str:
+    if not refs:
+        return "none"
+    parts: list[str] = []
+    for item in refs:
+        source_id = str(item.get("global_source_requirement_id") or item.get("global_requirement_id") or "").strip()
+        statement = clean_statement_noise(str(item.get("global_statement", "")))
+        if source_id and statement:
+            parts.append(f"{source_id}: {statement}")
+        elif source_id:
+            parts.append(source_id)
+    return "; ".join(parts) if parts else "none"
 
 
-
-def build_control_item(index: int, mapping_item: dict[str, Any]) -> str:
-    benchmark = mapping_item["benchmark_requirement"]
-    matched = mapping_item.get("matched_organizational_requirement")
-    decision = mapping_item["decision"]
-    if decision == "aligned":
-        action = "adopted"
-        rationale = "Organizational standard already covers this CIS expectation."
-    elif decision == "partial":
-        action = "adapted"
-        rationale = "Organizational direction exists, but CIS provides a stronger or more explicit benchmark expression."
-    else:
-        action = "deferred"
-        rationale = "No explicit organizational requirement match. Review with control owners before adoption."
-
+def build_control_item(index: int, candidate: dict[str, Any]) -> str:
     lines = [
-        f"### BL-{index:03d} {benchmark['category']} / {benchmark['service']}",
-        f"- Decision: {action}",
-        f"- Benchmark source: {benchmark['requirement_id']}",
-        f"- Benchmark statement: {clean_statement_noise(benchmark['statement'])}",
-        f"- Organizational trace: {matched['requirement_id'] if matched else 'none'}",
-        f"- Rationale: {rationale}",
+        f"### BL-{index:03d} {candidate.get('category', 'general')} / {candidate.get('service', 'general')}",
+        f"- Source benchmark: {candidate.get('source_benchmark_requirement_id', '')}",
+        f"- Benchmark source requirement: {candidate.get('source_benchmark_source_requirement_id', '')}",
+        f"- Candidate priority: {candidate.get('candidate_priority', '')}",
+        f"- Extension type: {candidate.get('extension_type', '')}",
+        f"- Proposed control: {clean_statement_noise(str(candidate.get('proposed_control_statement', '')))}",
+        f"- Related Global Standard requirements: {_render_global_refs(candidate.get('related_global_requirements', []))}",
+        f"- Inclusion rationale: {clean_statement_noise(str(candidate.get('reason_for_inclusion', '')))}",
     ]
-    if matched:
-        lines.append(f"- Organization statement: {clean_statement_noise(matched['statement'])}")
     return "\n".join(lines)
 
 
+def build_report(
+    case_name: str,
+    org_data: dict[str, Any],
+    benchmark_data: dict[str, Any],
+    standard_coverage: dict[str, Any],
+    benchmark_extensions: dict[str, Any],
+    baseline_candidates: dict[str, Any],
+) -> str:
+    coverage_summary = standard_coverage.get("summary", {})
+    extension_summary = benchmark_extensions.get("summary", {})
+    candidate_summary = baseline_candidates.get("summary", {})
+    coverage_rows = standard_coverage.get("rows", [])
+    extension_rows = benchmark_extensions.get("rows", [])
+    candidate_rows = baseline_candidates.get("rows", [])
 
-def build_report(case_name: str, analysis: dict[str, Any], org_data: dict[str, Any], benchmark_data: dict[str, Any]) -> str:
-    summary = analysis["summary"]
-    mapping = analysis.get("mapping", [])
-    gap_items = [item for item in mapping if item["decision"] == "gap"]
-    partial_items = [item for item in mapping if item["decision"] == "partial"]
-    gap_by_category = Counter(item["benchmark_requirement"].get("category", "general") for item in gap_items)
-    top_gap_lines = "\n".join(
-        f"- {item['benchmark_requirement']['source_requirement_id']} {clean_statement_noise(item['benchmark_requirement']['statement'])}"
-        for item in gap_items[:10]
+    uncovered_examples = "\n".join(
+        f"- {row['global_source_requirement_id']} {clean_statement_noise(row['global_statement'])}"
+        for row in coverage_rows
+        if row.get("coverage_status") == "not_addressed_by_benchmark"
     ) or "- None"
-    gap_area_lines = "\n".join(
-        f"- {category}: {count}"
-        for category, count in gap_by_category.most_common(8)
+    uncovered_examples = "\n".join(uncovered_examples.splitlines()[:10])
+
+    org_specific_examples = "\n".join(
+        f"- {row['global_source_requirement_id']} {clean_statement_noise(row['global_statement'])}"
+        for row in coverage_rows
+        if row.get("coverage_status") == "organization_specific"
     ) or "- None"
-    partial_lines = "\n".join(
-        f"- {item['benchmark_requirement']['source_requirement_id']} {clean_statement_noise(item['benchmark_requirement']['statement'])}"
-        for item in partial_items[:10]
+    org_specific_examples = "\n".join(org_specific_examples.splitlines()[:10])
+
+    extension_by_type = Counter(row.get("extension_type", "unknown") for row in extension_rows)
+    extension_lines = "\n".join(
+        f"- {kind}: {count}"
+        for kind, count in extension_by_type.most_common()
     ) or "- None"
+
+    candidate_lines = "\n".join(
+        f"- {row['source_benchmark_source_requirement_id']} {clean_statement_noise(row['proposed_control_statement'])}"
+        for row in candidate_rows[:12]
+    ) or "- None"
+
     return (
         "# Baseline Report\n\n"
         "## Executive Summary\n"
-        f"The {case_name} case produced an Alibaba Cloud baseline by comparing the organizational cloud security standard against the CIS Alibaba Cloud Foundations Benchmark. "
-        f"This run uses conservative matching to avoid overstating coverage. Aligned items: {summary['aligned']}; partial items: {summary['partial']}; benchmark gaps: {summary['gap']}; organization-only items: {summary['organization_only']}.\n\n"
+        f"The {case_name} case evaluated how the Global Standard is reflected in the benchmark and where the benchmark extends beyond the current Global Standard. "
+        f"Covered Global Standard requirements: {coverage_summary.get('covered', 0)}; partially covered: {coverage_summary.get('partially_covered', 0)}; "
+        f"not addressed by benchmark: {coverage_summary.get('not_addressed_by_benchmark', 0)}; organization-specific: {coverage_summary.get('organization_specific', 0)}. "
+        f"Benchmark extensions identified: {extension_summary.get('total_extensions', 0)}; baseline candidates created: {candidate_summary.get('total_candidates', 0)}.\n\n"
         "## Inputs Reviewed\n"
-        f"- Organization policy files: {', '.join(org_data.get('source_files', [])) or 'none'}\n"
-        f"- CIS benchmark files: {', '.join(benchmark_data.get('source_files', [])) or 'none'}\n\n"
+        f"- Global Policy files: {', '.join(org_data.get('source_files', [])) or 'none'}\n"
+        f"- Third-Party Standard files: {', '.join(benchmark_data.get('source_files', [])) or 'none'}\n\n"
         "## Method\n"
-        "- Parse organization policy into structured requirements and strategy themes.\n"
-        "- Parse CIS Alibaba Cloud benchmark into structured benchmark requirements.\n"
-        "- Match by category and keyword overlap.\n"
-        "- Apply conservative thresholds so generic governance requirements do not automatically satisfy service-specific CIS controls.\n"
-        "- Convert mapping results into adopted, adapted, and deferred baseline controls.\n\n"
-        "## Key Alignment Findings\n"
-        f"- Strongest organizational theme: {org_data.get('strategy_signals', [{}])[0].get('theme', 'unknown')}\n"
-        f"- Strongest benchmark theme: {benchmark_data.get('benchmark_themes', [{}])[0].get('theme', 'unknown')}\n"
-        "- The organizational standard strongly covers governance-level logging, encryption, and workload hardening requirements.\n"
-        "- The largest remaining gaps are Alibaba Cloud-specific IAM password policy controls and service-specific configuration controls.\n\n"
-        "## Baseline Summary\n"
-        f"- Adopted controls: {summary['aligned']}\n"
-        f"- Adapted controls: {summary['partial']}\n"
-        f"- Deferred controls: {summary['gap']}\n\n"
-        "## Major Gap Areas\n"
-        f"{gap_area_lines}\n\n"
-        "## Representative Gaps\n"
-        f"{top_gap_lines}\n\n"
-        "## Representative Partial Matches\n"
-        f"{partial_lines}\n\n"
-        "## Residual Gaps\n"
-        "- PDF table extraction still leaves some broken words and mixed explanatory text in the organizational source artifact.\n"
-        "- Benchmark gaps need human review before being treated as mandatory internal controls.\n"
-        "- Some gaps may be covered operationally outside the standard, but that evidence is not in the current source documents.\n\n"
+        "- Parse the Global Policy into structured requirements.\n"
+        "- Parse the Third-Party Standard into structured benchmark requirements.\n"
+        "- Evaluate which Global Standard requirements are represented in the benchmark.\n"
+        "- Identify benchmark controls that introduce platform-specific, stronger, or entirely new control content.\n"
+        "- Promote benchmark extensions into baseline candidates for Alibaba Cloud implementation review.\n\n"
+        "## Standard Coverage Summary\n"
+        f"- Covered: {coverage_summary.get('covered', 0)}\n"
+        f"- Partially covered: {coverage_summary.get('partially_covered', 0)}\n"
+        f"- Not addressed by benchmark: {coverage_summary.get('not_addressed_by_benchmark', 0)}\n"
+        f"- Organization-specific: {coverage_summary.get('organization_specific', 0)}\n\n"
+        "## Global Standard Requirements Not Addressed By Benchmark\n"
+        f"{uncovered_examples}\n\n"
+        "## Organization-Specific Requirements\n"
+        f"{org_specific_examples}\n\n"
+        "## Benchmark Extension Summary\n"
+        f"{extension_lines}\n\n"
+        "## Candidate Controls For Baseline Inclusion\n"
+        f"{candidate_lines}\n\n"
         "## Next Actions\n"
-        "- Review gap items with cloud platform engineering and IAM owners first.\n"
-        "- Decide which Alibaba Cloud-specific CIS controls should be adopted into the internal baseline versus handled as platform exceptions.\n"
-        "- Refine source documents into markdown with stable headings and bullets for better extraction quality.\n"
+        "- Review organization-specific requirements to confirm they should remain outside the cloud benchmark mapping scope.\n"
+        "- Review baseline candidates with Cloud Platform Engineering and IAM owners.\n"
+        "- Separate benchmark extensions that are reference-only from those that must become mandatory platform controls.\n"
     )
 
 
-def classify_priority(source_requirement_id: str) -> str:
-    if source_requirement_id in P0_IDS:
-        return "P0"
-    if source_requirement_id in P1_IDS:
-        return "P1"
-    return "P2"
+def build_cn_recommendations(
+    case_name: str,
+    standard_coverage: dict[str, Any],
+    benchmark_extensions: dict[str, Any],
+    baseline_candidates: dict[str, Any],
+) -> str:
+    coverage_summary = standard_coverage.get("summary", {})
+    extension_summary = benchmark_extensions.get("summary", {})
+    candidate_summary = baseline_candidates.get("summary", {})
+    candidate_rows = baseline_candidates.get("rows", [])
 
-
-def build_cn_recommendations(case_name: str, analysis: dict[str, Any]) -> str:
-    mapping = analysis.get("mapping", [])
-    gaps = [item for item in mapping if item["decision"] == "gap"]
-    partials = [item for item in mapping if item["decision"] == "partial"]
     grouped: dict[str, list[dict[str, Any]]] = {"P0": [], "P1": [], "P2": []}
-    for item in gaps:
-        grouped[classify_priority(item["benchmark_requirement"]["source_requirement_id"])].append(item)
+    for row in candidate_rows:
+        grouped.setdefault(str(row.get("candidate_priority", "P2")), []).append(row)
 
     def render_group(items: list[dict[str, Any]]) -> str:
         if not items:
             return "- 无\n"
-        lines: list[str] = []
-        for item in items:
-            req = item["benchmark_requirement"]
-            lines.append(f"- `{req['source_requirement_id']}` {clean_statement_noise(req['statement'])}")
+        lines = [
+            f"- `{row['source_benchmark_source_requirement_id']}` {clean_statement_noise(row['proposed_control_statement'])}"
+            for row in items
+        ]
         return "\n".join(lines) + "\n"
 
-    partial_lines = "\n".join(
-        f"- `{item['benchmark_requirement']['source_requirement_id']}` {clean_statement_noise(item['benchmark_requirement']['statement'])}"
-        for item in partials[:15]
+    org_specific_lines = "\n".join(
+        f"- `{row['global_source_requirement_id']}` {clean_statement_noise(row['global_statement'])}"
+        for row in standard_coverage.get("rows", [])
+        if row.get("coverage_status") == "organization_specific"
     ) or "- 无"
+    org_specific_lines = "\n".join(org_specific_lines.splitlines()[:10])
 
     return (
         "# Alibaba Cloud Baseline 优先级建议\n\n"
         "## 结论\n"
         f"- Case: {case_name}\n"
-        f"- 当前 conservative 分析结果：aligned {analysis['summary']['aligned']}，partial {analysis['summary']['partial']}，gap {analysis['summary']['gap']}。\n"
-        "- 建议不要把全部 CIS 项直接等同为内部强制基线，而是分层纳管。\n"
-        "- P0 为应优先纳入的高价值控制；P1 为应尽快补齐的服务级控制；P2 为结合实际云服务范围决定是否纳入的控制。\n\n"
-        "## P0 应优先纳入 Internal Baseline\n"
-        f"{render_group(grouped['P0'])}\n"
-        "## P1 应在后续版本补齐\n"
-        f"{render_group(grouped['P1'])}\n"
-        "## P2 可按平台范围和实际服务使用情况决定\n"
-        f"{render_group(grouped['P2'])}\n"
-        "## Partial 项处理建议\n"
-        f"{partial_lines}\n\n"
+        f"- Global Standard 覆盖情况：covered {coverage_summary.get('covered', 0)}，partially covered {coverage_summary.get('partially_covered', 0)}，"
+        f"not addressed by benchmark {coverage_summary.get('not_addressed_by_benchmark', 0)}，organization specific {coverage_summary.get('organization_specific', 0)}。\n"
+        f"- benchmark 扩展项数量：{extension_summary.get('total_extensions', 0)}；当前生成 baseline candidates：{candidate_summary.get('total_candidates', 0)}。\n"
+        "- 建议不要把全部 benchmark 扩展项直接视为内部强制基线，而应先区分组织特有要求、平台细化要求和新增控制领域。\n\n"
+        "## P0 应优先评审并纳入候选基线\n"
+        f"{render_group(grouped.get('P0', []))}\n"
+        "## P1 应由平台团队评估是否纳入后续版本\n"
+        f"{render_group(grouped.get('P1', []))}\n"
+        "## P2 可按服务实际使用范围决定\n"
+        f"{render_group(grouped.get('P2', []))}\n"
+        "## 组织特有要求\n"
+        f"{org_specific_lines}\n\n"
         "## 建议动作\n"
-        "- 先由 IAM 与 Cloud Platform Owner 审核 P0 项，确认直接纳入 Alibaba Cloud baseline。\n"
-        "- P1 项按域拆分给平台团队：日志、网络、OSS、RDS、ACK、安全中心。\n"
-        "- Partial 项不要视为已覆盖，应补平台级实现标准、配置基线或检测规则。\n"
+        "- 先由云平台团队确认 P0 candidates 是否应进入 Alibaba Cloud baseline。\n"
+        "- 对 benchmark_extensions 中的 platform_specific_detail 项，优先补齐平台级实施标准。\n"
+        "- 对 organization_specific 项，不要求 benchmark 强制映射，但应保留在组织治理体系中。\n"
     )
-
 
 
 def run(case_name: str) -> tuple[Path, Path, Path]:
@@ -174,19 +173,18 @@ def run(case_name: str) -> tuple[Path, Path, Path]:
     working_dir = case_dir / "working"
     org_path = working_dir / "organizational_requirements.json"
     benchmark_path = working_dir / "benchmark_requirements.json"
-    analysis_path = working_dir / "mapping_analysis.json"
+    standard_coverage_path = working_dir / "standard_coverage.json"
+    benchmark_extensions_path = working_dir / "benchmark_extensions.json"
+    baseline_candidates_path = working_dir / "baseline_candidates.json"
     controls_path = working_dir / "baseline_controls.md"
     report_path = working_dir / "baseline_report.md"
     recommendations_cn_path = working_dir / "baseline_priority_recommendations_cn.md"
 
     org_data = load_json(org_path)
     benchmark_data = load_json(benchmark_path)
-    analysis = load_json(analysis_path)
-
-    mapping = analysis.get("mapping", [])
-    adopted = [item for item in mapping if item["decision"] == "aligned"]
-    adapted = [item for item in mapping if item["decision"] == "partial"]
-    deferred = [item for item in mapping if item["decision"] == "gap"]
+    standard_coverage = load_json(standard_coverage_path)
+    benchmark_extensions = load_json(benchmark_extensions_path)
+    baseline_candidates = load_json(baseline_candidates_path)
 
     control_lines = [
         "# Baseline Controls",
@@ -194,28 +192,25 @@ def run(case_name: str) -> tuple[Path, Path, Path]:
         "## Baseline Metadata",
         f"- Case: {case_name}",
         "- Scope: Alibaba Cloud",
-        "- Source strategy: cloud security standard",
-        "- Source benchmark: CIS Alibaba Cloud Foundations Benchmark",
+        "- Primary source: Global Standard",
+        "- Reference benchmark: Third-Party Standard",
         "",
-        "## Control List",
+        "## Candidate Control List",
     ]
-    for index, item in enumerate(adopted + adapted + deferred, start=1):
+    for index, item in enumerate(baseline_candidates.get("rows", []), start=1):
         control_lines.append(build_control_item(index, item))
         control_lines.append("")
-    control_lines.extend(["## Deferred Items"])
-    if deferred:
-        control_lines.extend(
-            f"- {item['benchmark_requirement']['requirement_id']}: {clean_statement_noise(item['benchmark_requirement']['statement'])}"
-            for item in deferred
-        )
-    else:
-        control_lines.append("- None")
 
-    controls_path.write_text("\n".join(control_lines) + "\n", encoding="utf-8")
-    report_path.write_text(build_report(case_name, analysis, org_data, benchmark_data), encoding="utf-8")
-    recommendations_cn_path.write_text(build_cn_recommendations(case_name, analysis), encoding="utf-8")
+    controls_path.write_text("\n".join(control_lines).strip() + "\n", encoding="utf-8")
+    report_path.write_text(
+        build_report(case_name, org_data, benchmark_data, standard_coverage, benchmark_extensions, baseline_candidates),
+        encoding="utf-8",
+    )
+    recommendations_cn_path.write_text(
+        build_cn_recommendations(case_name, standard_coverage, benchmark_extensions, baseline_candidates),
+        encoding="utf-8",
+    )
     return controls_path, report_path, recommendations_cn_path
-
 
 
 def main() -> int:

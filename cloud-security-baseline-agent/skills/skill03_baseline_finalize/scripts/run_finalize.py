@@ -29,9 +29,10 @@ DOMAIN_TITLES = {
 SHEET_ORDER = [
     "Summary",
     "Document Sections",
-    "Control Mapping",
-    "Pending Controls",
-    "Organizational Only",
+    "Standard Coverage",
+    "Benchmark Extensions",
+    "Organization Specific",
+    "Baseline Candidates",
     "Recommendations CN",
 ]
 
@@ -173,6 +174,9 @@ def _build_workbook(
     case_name: str,
     final_payload: dict[str, Any],
     analysis: dict[str, Any],
+    standard_coverage: dict[str, Any],
+    benchmark_extensions: dict[str, Any],
+    baseline_candidates: dict[str, Any],
     recommendations_text: str,
     finalization_model: str,
     runtime_status: dict[str, Any],
@@ -188,10 +192,12 @@ def _build_workbook(
         ("document_title", final_payload["title"]),
         ("target_platform", "Alibaba Cloud"),
         ("finalization_model", finalization_model),
-        ("carry_forward_count", analysis["summary"]["carry_forward"]),
-        ("adapt_for_platform_count", analysis["summary"]["adapt_for_platform"]),
-        ("new_baseline_control_count", analysis["summary"]["new_baseline_control"]),
-        ("organizational_only_count", analysis["summary"]["global_policy_only"]),
+        ("covered_count", standard_coverage["summary"]["covered"]),
+        ("partially_covered_count", standard_coverage["summary"]["partially_covered"]),
+        ("not_addressed_by_benchmark_count", standard_coverage["summary"]["not_addressed_by_benchmark"]),
+        ("organization_specific_count", standard_coverage["summary"]["organization_specific"]),
+        ("benchmark_extension_count", benchmark_extensions["summary"]["total_extensions"]),
+        ("baseline_candidate_count", baseline_candidates["summary"]["total_candidates"]),
         ("llm_used", str(bool(used_llm))),
         ("provider", runtime_status.get("provider", "unknown")),
     ]
@@ -210,10 +216,42 @@ def _build_workbook(
         sections_sheet.append([f"Domain Overview: {item['domain']}", item["summary"]])
     _set_sheet_style(sections_sheet, [("A", 30), ("B", 120)])
 
-    mapping_sheet = workbook.create_sheet("Control Mapping")
-    mapping_sheet.append([
+    coverage_sheet = workbook.create_sheet("Standard Coverage")
+    coverage_sheet.append([
+        "Global Requirement ID",
+        "Global Source Requirement ID",
+        "Global Section",
+        "Global Statement",
+        "Category",
+        "Priority",
+        "Service",
+        "Coverage Status",
+        "Matched Benchmark Requirements",
+        "Rationale",
+    ])
+    for item in standard_coverage.get("rows", []):
+        matched_label = "; ".join(
+            f"{row.get('source_requirement_id') or row.get('requirement_id')}: {clean_statement_noise(str(row.get('statement', '')))}"
+            for row in item.get("matched_benchmark_requirements", [])
+        )
+        coverage_sheet.append([
+            item.get("global_requirement_id", ""),
+            item.get("global_source_requirement_id", ""),
+            item.get("global_section", ""),
+            clean_statement_noise(str(item.get("global_statement", ""))),
+            item.get("category", ""),
+            item.get("priority", ""),
+            item.get("service", ""),
+            item.get("coverage_status", ""),
+            matched_label,
+            clean_statement_noise(str(item.get("coverage_rationale", ""))),
+        ])
+    _set_sheet_style(coverage_sheet, [("A", 18), ("B", 22), ("C", 22), ("D", 60), ("E", 18), ("F", 12), ("G", 16), ("H", 24), ("I", 72), ("J", 54)])
+
+    extension_sheet = workbook.create_sheet("Benchmark Extensions")
+    extension_sheet.append([
         "Domain",
-        "Baseline Action",
+        "Extension Type",
         "Decision",
         "Benchmark Requirement ID",
         "Benchmark Source Requirement ID",
@@ -221,65 +259,34 @@ def _build_workbook(
         "Benchmark Statement",
         "Benchmark Category",
         "Benchmark Service",
-        "Matched Global Requirement ID",
-        "Matched Global Source Requirement ID",
-        "Matched Global Section",
-        "Matched Global Statement",
-        "Match Score",
-        "Trace",
+        "Related Global Requirements",
+        "Baseline Candidate",
+        "Candidate Priority",
         "Rationale",
     ])
-    for item in analysis.get("baseline_mapping", []):
-        benchmark = item.get("third_party_requirement", {})
-        matched = item.get("matched_global_policy_requirement", {})
-        mapping_sheet.append([
-            _title(str(benchmark.get("category", "general"))),
-            item.get("baseline_action", ""),
+    for item in benchmark_extensions.get("rows", []):
+        related_label = "; ".join(
+            f"{row.get('global_source_requirement_id') or row.get('global_requirement_id')}: {clean_statement_noise(str(row.get('global_statement', '')))}"
+            for row in item.get("related_global_requirements", [])
+        )
+        extension_sheet.append([
+            _title(str(item.get("category", "general"))),
+            item.get("extension_type", ""),
             item.get("decision", ""),
-            benchmark.get("requirement_id", ""),
-            benchmark.get("source_requirement_id", ""),
-            benchmark.get("section", ""),
-            clean_statement_noise(str(benchmark.get("statement", ""))),
-            benchmark.get("category", ""),
-            benchmark.get("service", ""),
-            matched.get("requirement_id", ""),
-            matched.get("source_requirement_id", ""),
-            matched.get("section", ""),
-            clean_statement_noise(str(matched.get("statement", ""))),
-            item.get("match_score", ""),
-            _render_trace(item),
-            clean_statement_noise(str(item.get("rationale", ""))),
+            item.get("benchmark_requirement_id", ""),
+            item.get("benchmark_source_requirement_id", ""),
+            item.get("benchmark_section", ""),
+            clean_statement_noise(str(item.get("benchmark_statement", ""))),
+            item.get("category", ""),
+            item.get("service", ""),
+            related_label,
+            str(bool(item.get("baseline_candidate", False))),
+            item.get("candidate_priority", ""),
+            clean_statement_noise(str(item.get("extension_rationale", ""))),
         ])
-    _set_sheet_style(
-        mapping_sheet,
-        [("A", 26), ("B", 20), ("C", 16), ("D", 18), ("E", 22), ("F", 24), ("G", 56), ("H", 18),
-         ("I", 18), ("J", 18), ("K", 22), ("L", 24), ("M", 56), ("N", 12), ("O", 24), ("P", 48)],
-    )
+    _set_sheet_style(extension_sheet, [("A", 26), ("B", 24), ("C", 16), ("D", 18), ("E", 22), ("F", 24), ("G", 56), ("H", 18), ("I", 18), ("J", 70), ("K", 18), ("L", 16), ("M", 48)])
 
-    pending_sheet = workbook.create_sheet("Pending Controls")
-    pending_sheet.append([
-        "Benchmark Requirement ID",
-        "Benchmark Source Requirement ID",
-        "Benchmark Section",
-        "Benchmark Statement",
-        "Benchmark Category",
-        "Benchmark Service",
-        "Rationale",
-    ])
-    for item in _bucket(analysis.get("baseline_mapping", []), "gap"):
-        benchmark = item.get("third_party_requirement", {})
-        pending_sheet.append([
-            benchmark.get("requirement_id", ""),
-            benchmark.get("source_requirement_id", ""),
-            benchmark.get("section", ""),
-            clean_statement_noise(str(benchmark.get("statement", ""))),
-            benchmark.get("category", ""),
-            benchmark.get("service", ""),
-            clean_statement_noise(str(item.get("rationale", ""))),
-        ])
-    _set_sheet_style(pending_sheet, [("A", 18), ("B", 22), ("C", 24), ("D", 68), ("E", 18), ("F", 18), ("G", 48)])
-
-    org_only_sheet = workbook.create_sheet("Organizational Only")
+    org_only_sheet = workbook.create_sheet("Organization Specific")
     org_only_sheet.append([
         "Global Requirement ID",
         "Global Source Requirement ID",
@@ -287,17 +294,55 @@ def _build_workbook(
         "Global Statement",
         "Category",
         "Priority",
+        "Rationale",
     ])
-    for item in analysis.get("global_policy_only_requirements", []):
+    for item in standard_coverage.get("rows", []):
+        if item.get("coverage_status") != "organization_specific":
+            continue
         org_only_sheet.append([
-            item.get("requirement_id", ""),
-            item.get("source_requirement_id", ""),
-            item.get("section", ""),
-            clean_statement_noise(str(item.get("statement", ""))),
+            item.get("global_requirement_id", ""),
+            item.get("global_source_requirement_id", ""),
+            item.get("global_section", ""),
+            clean_statement_noise(str(item.get("global_statement", ""))),
             item.get("category", ""),
             item.get("priority", ""),
+            clean_statement_noise(str(item.get("coverage_rationale", ""))),
         ])
-    _set_sheet_style(org_only_sheet, [("A", 18), ("B", 22), ("C", 24), ("D", 68), ("E", 18), ("F", 12)])
+    _set_sheet_style(org_only_sheet, [("A", 18), ("B", 22), ("C", 24), ("D", 68), ("E", 18), ("F", 12), ("G", 48)])
+
+    candidates_sheet = workbook.create_sheet("Baseline Candidates")
+    candidates_sheet.append([
+        "Candidate ID",
+        "Source Benchmark Requirement ID",
+        "Source Benchmark Source Requirement ID",
+        "Proposed Control Title",
+        "Proposed Control Statement",
+        "Category",
+        "Priority",
+        "Service",
+        "Extension Type",
+        "Related Global Requirements",
+        "Rationale",
+    ])
+    for item in baseline_candidates.get("rows", []):
+        related_label = "; ".join(
+            f"{row.get('global_source_requirement_id') or row.get('global_requirement_id')}: {clean_statement_noise(str(row.get('global_statement', '')))}"
+            for row in item.get("related_global_requirements", [])
+        )
+        candidates_sheet.append([
+            item.get("candidate_id", ""),
+            item.get("source_benchmark_requirement_id", ""),
+            item.get("source_benchmark_source_requirement_id", ""),
+            clean_statement_noise(str(item.get("proposed_control_title", ""))),
+            clean_statement_noise(str(item.get("proposed_control_statement", ""))),
+            item.get("category", ""),
+            item.get("candidate_priority", ""),
+            item.get("service", ""),
+            item.get("extension_type", ""),
+            related_label,
+            clean_statement_noise(str(item.get("reason_for_inclusion", ""))),
+        ])
+    _set_sheet_style(candidates_sheet, [("A", 16), ("B", 18), ("C", 22), ("D", 42), ("E", 60), ("F", 18), ("G", 12), ("H", 16), ("I", 22), ("J", 62), ("K", 52)])
 
     rec_sheet = workbook.create_sheet("Recommendations CN")
     rec_sheet.append(["Section", "Content"])
@@ -320,9 +365,21 @@ def validate_workbook(path: Path) -> None:
     expected_headers = {
         "Summary": ["Field", "Value"],
         "Document Sections": ["Section", "Content"],
-        "Control Mapping": [
+        "Standard Coverage": [
+            "Global Requirement ID",
+            "Global Source Requirement ID",
+            "Global Section",
+            "Global Statement",
+            "Category",
+            "Priority",
+            "Service",
+            "Coverage Status",
+            "Matched Benchmark Requirements",
+            "Rationale",
+        ],
+        "Benchmark Extensions": [
             "Domain",
-            "Baseline Action",
+            "Extension Type",
             "Decision",
             "Benchmark Requirement ID",
             "Benchmark Source Requirement ID",
@@ -330,30 +387,32 @@ def validate_workbook(path: Path) -> None:
             "Benchmark Statement",
             "Benchmark Category",
             "Benchmark Service",
-            "Matched Global Requirement ID",
-            "Matched Global Source Requirement ID",
-            "Matched Global Section",
-            "Matched Global Statement",
-            "Match Score",
-            "Trace",
+            "Related Global Requirements",
+            "Baseline Candidate",
+            "Candidate Priority",
             "Rationale",
         ],
-        "Pending Controls": [
-            "Benchmark Requirement ID",
-            "Benchmark Source Requirement ID",
-            "Benchmark Section",
-            "Benchmark Statement",
-            "Benchmark Category",
-            "Benchmark Service",
-            "Rationale",
-        ],
-        "Organizational Only": [
+        "Organization Specific": [
             "Global Requirement ID",
             "Global Source Requirement ID",
             "Global Section",
             "Global Statement",
             "Category",
             "Priority",
+            "Rationale",
+        ],
+        "Baseline Candidates": [
+            "Candidate ID",
+            "Source Benchmark Requirement ID",
+            "Source Benchmark Source Requirement ID",
+            "Proposed Control Title",
+            "Proposed Control Statement",
+            "Category",
+            "Priority",
+            "Service",
+            "Extension Type",
+            "Related Global Requirements",
+            "Rationale",
         ],
         "Recommendations CN": ["Section", "Content"],
     }
@@ -368,15 +427,30 @@ def run(case_name: str) -> tuple[Path, Path]:
     working_dir = PROJECT_ROOT / "cases" / case_name / "working"
     profile_path = working_dir / "project_profile.json"
     analysis_path = working_dir / "baseline_analysis.json"
+    standard_coverage_path = working_dir / "standard_coverage.json"
+    benchmark_extensions_path = working_dir / "benchmark_extensions.json"
+    baseline_candidates_path = working_dir / "baseline_candidates.json"
     controls_path = working_dir / "baseline_controls.md"
     report_path = working_dir / "baseline_report.md"
     recommendations_path = working_dir / "baseline_priority_recommendations_cn.md"
-    for required in (profile_path, analysis_path, controls_path, report_path, recommendations_path):
+    for required in (
+        profile_path,
+        analysis_path,
+        standard_coverage_path,
+        benchmark_extensions_path,
+        baseline_candidates_path,
+        controls_path,
+        report_path,
+        recommendations_path,
+    ):
         if not required.exists():
             raise FileNotFoundError(f"Missing skill03 input artifact: {required}")
 
     profile = load_json(profile_path)
     analysis = load_json(analysis_path)
+    standard_coverage = load_json(standard_coverage_path)
+    benchmark_extensions = load_json(benchmark_extensions_path)
+    baseline_candidates = load_json(baseline_candidates_path)
     controls_text = controls_path.read_text(encoding="utf-8")
     report_text = report_path.read_text(encoding="utf-8")
     recommendations_text = recommendations_path.read_text(encoding="utf-8")
@@ -401,6 +475,9 @@ def run(case_name: str) -> tuple[Path, Path]:
                 "fallback_reason": fallback_reason,
                 "source_artifacts": {
                     "baseline_analysis": str(analysis_path.relative_to(PROJECT_ROOT)),
+                    "standard_coverage": str(standard_coverage_path.relative_to(PROJECT_ROOT)),
+                    "benchmark_extensions": str(benchmark_extensions_path.relative_to(PROJECT_ROOT)),
+                    "baseline_candidates": str(baseline_candidates_path.relative_to(PROJECT_ROOT)),
                     "baseline_controls": str(controls_path.relative_to(PROJECT_ROOT)),
                     "baseline_report": str(report_path.relative_to(PROJECT_ROOT)),
                     "priority_recommendations_cn": str(recommendations_path.relative_to(PROJECT_ROOT)),
@@ -424,6 +501,9 @@ def run(case_name: str) -> tuple[Path, Path]:
         "4. Control details will be rendered locally. Your job is to provide formal English section wording and domain overviews.\n"
         "5. Use concise, formal English. Avoid parser noise.\n\n"
         f"[baseline_analysis.json]\n{analysis}\n\n"
+        f"[standard_coverage.json]\n{standard_coverage}\n\n"
+        f"[benchmark_extensions.json]\n{benchmark_extensions}\n\n"
+        f"[baseline_candidates.json]\n{baseline_candidates}\n\n"
         f"[baseline_controls.md]\n{controls_text[:12000]}\n\n"
         f"[baseline_report.md]\n{report_text[:8000]}\n\n"
         f"[baseline_priority_recommendations_cn.md]\n{recommendations_text[:8000]}"
@@ -452,6 +532,9 @@ def run(case_name: str) -> tuple[Path, Path]:
                 "fallback_reason": fallback_reason,
                 "source_artifacts": {
                     "baseline_analysis": str(analysis_path.relative_to(PROJECT_ROOT)),
+                    "standard_coverage": str(standard_coverage_path.relative_to(PROJECT_ROOT)),
+                    "benchmark_extensions": str(benchmark_extensions_path.relative_to(PROJECT_ROOT)),
+                    "baseline_candidates": str(baseline_candidates_path.relative_to(PROJECT_ROOT)),
                     "baseline_controls": str(controls_path.relative_to(PROJECT_ROOT)),
                     "baseline_report": str(report_path.relative_to(PROJECT_ROOT)),
                     "priority_recommendations_cn": str(recommendations_path.relative_to(PROJECT_ROOT)),
@@ -466,6 +549,9 @@ def run(case_name: str) -> tuple[Path, Path]:
         case_name=case_name,
         final_payload=final_payload,
         analysis=analysis,
+        standard_coverage=standard_coverage,
+        benchmark_extensions=benchmark_extensions,
+        baseline_candidates=baseline_candidates,
         recommendations_text=recommendations_text,
         finalization_model=finalization_model,
         runtime_status=runtime_status,
@@ -484,6 +570,9 @@ def run(case_name: str) -> tuple[Path, Path]:
             "fallback_reason": fallback_reason,
             "source_artifacts": {
                 "baseline_analysis": str(analysis_path.relative_to(PROJECT_ROOT)),
+                "standard_coverage": str(standard_coverage_path.relative_to(PROJECT_ROOT)),
+                "benchmark_extensions": str(benchmark_extensions_path.relative_to(PROJECT_ROOT)),
+                "baseline_candidates": str(baseline_candidates_path.relative_to(PROJECT_ROOT)),
                 "baseline_controls": str(controls_path.relative_to(PROJECT_ROOT)),
                 "baseline_report": str(report_path.relative_to(PROJECT_ROOT)),
                 "priority_recommendations_cn": str(recommendations_path.relative_to(PROJECT_ROOT)),

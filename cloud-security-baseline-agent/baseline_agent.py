@@ -77,6 +77,9 @@ class CasePaths:
     global_policy_parse: Path
     third_party_standard_parse: Path
     baseline_analysis: Path
+    standard_coverage: Path
+    benchmark_extensions: Path
+    baseline_candidates: Path
     baseline_controls: Path
     baseline_report: Path
     priority_recommendations_cn: Path
@@ -116,6 +119,9 @@ def build_case_paths(case_name: str) -> CasePaths:
         global_policy_parse=working_dir / "global_policy_parse.json",
         third_party_standard_parse=working_dir / "third_party_standard_parse.json",
         baseline_analysis=working_dir / "baseline_analysis.json",
+        standard_coverage=working_dir / "standard_coverage.json",
+        benchmark_extensions=working_dir / "benchmark_extensions.json",
+        baseline_candidates=working_dir / "baseline_candidates.json",
         baseline_controls=working_dir / "baseline_controls.md",
         baseline_report=working_dir / "baseline_report.md",
         priority_recommendations_cn=working_dir / "baseline_priority_recommendations_cn.md",
@@ -179,6 +185,9 @@ def sync_workflow_state(paths: CasePaths) -> dict[str, Any]:
             "global_policy_parse": str(paths.global_policy_parse.relative_to(PROJECT_ROOT)),
             "third_party_standard_parse": str(paths.third_party_standard_parse.relative_to(PROJECT_ROOT)),
             "baseline_analysis": str(paths.baseline_analysis.relative_to(PROJECT_ROOT)),
+            "standard_coverage": str(paths.standard_coverage.relative_to(PROJECT_ROOT)),
+            "benchmark_extensions": str(paths.benchmark_extensions.relative_to(PROJECT_ROOT)),
+            "baseline_candidates": str(paths.baseline_candidates.relative_to(PROJECT_ROOT)),
             "baseline_controls": str(paths.baseline_controls.relative_to(PROJECT_ROOT)),
             "baseline_report": str(paths.baseline_report.relative_to(PROJECT_ROOT)),
             "priority_recommendations_cn": str(paths.priority_recommendations_cn.relative_to(PROJECT_ROOT)),
@@ -228,15 +237,15 @@ def run_pipeline(case_name: str, progress: Callable[[str], None] | None = None) 
         if progress is not None:
             progress(message)
 
-    emit("  4.1/4: parse global policy")
+    emit("  4.1/4: parse Global Policy")
     global_policy_parse = run_skill01(case_name, "global_policy")
-    emit(f"  Completed global policy parse: {global_policy_parse}")
+    emit(f"  Completed Global Policy parse: {global_policy_parse}")
 
-    emit("  4.2/4: parse third-party standard")
+    emit("  4.2/4: parse Third-Party Standard")
     third_party_parse = run_skill01(case_name, "third_party_standard")
-    emit(f"  Completed third-party standard parse: {third_party_parse}")
+    emit(f"  Completed Third-Party Standard parse: {third_party_parse}")
 
-    emit("  4.3/4: generate baseline analysis")
+    emit("  4.3/4: generate Baseline Analysis")
     baseline_analysis = run_skill02(case_name)
     emit(f"  Completed baseline generation: {baseline_analysis}")
 
@@ -249,6 +258,9 @@ def run_pipeline(case_name: str, progress: Callable[[str], None] | None = None) 
         "global_policy_parse": str(paths.global_policy_parse),
         "third_party_standard_parse": str(paths.third_party_standard_parse),
         "baseline_analysis": str(paths.baseline_analysis),
+        "standard_coverage": str(paths.standard_coverage),
+        "benchmark_extensions": str(paths.benchmark_extensions),
+        "baseline_candidates": str(paths.baseline_candidates),
         "baseline_controls": str(paths.baseline_controls),
         "baseline_report": str(paths.baseline_report),
         "priority_recommendations_cn": str(paths.priority_recommendations_cn),
@@ -277,11 +289,30 @@ def validate_case(case_name: str) -> dict[str, Any]:
     )
 
     analysis = load_json(paths.baseline_analysis)
+    standard_coverage = load_json(paths.standard_coverage)
+    benchmark_extensions = load_json(paths.benchmark_extensions)
+    baseline_candidates = load_json(paths.baseline_candidates)
     validate_skill02_analysis(
         analysis=analysis,
         third_party_requirements=third_party_artifact.get("requirements", []),
         global_requirements=global_artifact.get("requirements", []),
     )
+    if len(standard_coverage.get("rows", [])) != len(global_artifact.get("requirements", [])):
+        raise RuntimeError("standard_coverage row count does not match global policy requirements")
+    if any(not str(row.get("global_requirement_id", "")).strip() for row in standard_coverage.get("rows", [])):
+        raise RuntimeError("standard_coverage contains rows without global_requirement_id")
+    benchmark_extension_ids = {
+        str(row.get("benchmark_requirement_id", "")).strip()
+        for row in benchmark_extensions.get("rows", [])
+        if str(row.get("benchmark_requirement_id", "")).strip()
+    }
+    candidate_source_ids = {
+        str(row.get("source_benchmark_requirement_id", "")).strip()
+        for row in baseline_candidates.get("rows", [])
+        if str(row.get("source_benchmark_requirement_id", "")).strip()
+    }
+    if not candidate_source_ids.issubset(benchmark_extension_ids):
+        raise RuntimeError("baseline_candidates references benchmark requirements missing from benchmark_extensions")
     compatibility_analysis = load_json(paths.working_dir / "mapping_analysis.json")
     validate_skill02_compatibility(compatibility_analysis, analysis)
 
@@ -304,6 +335,9 @@ def validate_case(case_name: str) -> dict[str, Any]:
             "global_policy_parse": str(paths.global_policy_parse),
             "third_party_standard_parse": str(paths.third_party_standard_parse),
             "baseline_analysis": str(paths.baseline_analysis),
+            "standard_coverage": str(paths.standard_coverage),
+            "benchmark_extensions": str(paths.benchmark_extensions),
+            "baseline_candidates": str(paths.baseline_candidates),
             "mapping_analysis": str(paths.working_dir / "mapping_analysis.json"),
             "final_baseline_xlsx": str(paths.final_baseline_xlsx),
             "workflow_state": str(paths.workflow_state),
@@ -353,7 +387,7 @@ def validate_all_cases() -> dict[str, Any]:
 def copy_final_workbook_to_downloads(case_name: str) -> Path:
     paths = build_case_paths(case_name)
     if not paths.final_baseline_xlsx.exists():
-        raise FileNotFoundError(f"Missing final workbook: {paths.final_baseline_xlsx}")
+        raise FileNotFoundError(f"Missing Final Baseline Workbook: {paths.final_baseline_xlsx}")
     downloads_dir = Path.home() / "Downloads"
     downloads_dir.mkdir(parents=True, exist_ok=True)
     target = downloads_dir / f"{case_name}-final_baseline.xlsx"
@@ -483,22 +517,22 @@ def launch_gui() -> int:
                 bootstrap_result = bootstrap_case(case_name)
                 self.queue.put(("log", json.dumps(bootstrap_result, indent=2, ensure_ascii=False)))
 
-                self.queue.put(("log", "Step 2/5: stage global policy"))
+                self.queue.put(("log", "Step 2/5: stage Global Policy"))
                 staged_global = stage_input(case_name, global_file, "global_policy")
-                self.queue.put(("log", f"Staged global policy: {staged_global}"))
+                self.queue.put(("log", f"Staged Global Policy: {staged_global}"))
 
-                self.queue.put(("log", "Step 3/5: stage third-party standard"))
+                self.queue.put(("log", "Step 3/5: stage Third-Party Standard"))
                 staged_third = stage_input(case_name, third_party_file, "third_party_standard")
-                self.queue.put(("log", f"Staged third-party standard: {staged_third}"))
+                self.queue.put(("log", f"Staged Third-Party Standard: {staged_third}"))
 
                 self.queue.put(("log", "Step 4/5: run analysis pipeline"))
                 run_result = run_pipeline(case_name, progress=lambda message: self.queue.put(("log", message)))
                 self.queue.put(("log", json.dumps(run_result, indent=2, ensure_ascii=False)))
 
-                self.queue.put(("log", "Step 5/5: copy final workbook to Downloads"))
+                self.queue.put(("log", "Step 5/5: copy Final Baseline Workbook to Downloads"))
                 downloaded = copy_final_workbook_to_downloads(case_name)
                 self.current_case = case_name
-                self.queue.put(("log", f"Downloaded final workbook: {downloaded}"))
+                self.queue.put(("log", f"Downloaded Final Baseline Workbook: {downloaded}"))
                 self.queue.put(("log", f"Instance complete: {case_name}"))
 
             self.run_async(task)

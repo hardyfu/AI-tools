@@ -1,6 +1,6 @@
 ---
 name: baseline-writer
-description: Use this skill when mapping analysis is complete and the project must output a usable Alibaba Cloud security baseline, including a baseline control list and a concise report that explains why each control is adopted, adapted, or deferred.
+description: Use this skill when Stage 2 analysis is complete and the project must render review artifacts from Global Standard coverage, benchmark extensions, and baseline candidates.
 ---
 
 # Baseline Writer
@@ -9,31 +9,34 @@ Use this skill only for final baseline generation.
 
 ## Goal
 
-Produce the baseline artifact set that the team can review and iterate: a control list and a short report.
+Produce the review artifact set that the team can inspect and iterate: a candidate control list, a concise report, and Chinese recommendations.
 
 ## Inputs
 
 - `cases/<case_name>/working/project_profile.json`
 - `cases/<case_name>/working/organizational_requirements.json`
 - `cases/<case_name>/working/benchmark_requirements.json`
-- `cases/<case_name>/working/mapping_analysis.json`
+- `cases/<case_name>/working/standard_coverage.json`
+- `cases/<case_name>/working/benchmark_extensions.json`
+- `cases/<case_name>/working/baseline_candidates.json`
 
 ## Output
 
 - `cases/<case_name>/working/baseline_controls.md`
 - `cases/<case_name>/working/baseline_report.md`
+- `cases/<case_name>/working/baseline_priority_recommendations_cn.md`
 - `scripts/agent04_runner.py` is the skill-specific executor
 
 ## Rules
 
-- Baseline controls must be traceable to source requirements.
-- Distinguish adopted, adapted, and deferred controls.
-- Prefer organization-mandated controls when they exceed CIS.
-- Keep unresolved items visible.
+- Baseline controls must remain traceable to benchmark and Global Standard evidence.
+- Distinguish Global Standard coverage from benchmark extensions.
+- Keep organization-specific requirements visible rather than forcing them into benchmark coverage.
+- Do not collapse all extensions into mandatory controls without preserving rationale.
 
 ## Procedure
 
-1. Load the analysis artifacts.
-2. Convert mapping results into baseline decisions.
-3. Write `baseline_controls.md`.
-4. Write `baseline_report.md`.
+1. Load Stage 2 artifacts.
+2. Render candidate controls from `baseline_candidates.json`.
+3. Summarize Global Standard coverage and benchmark extensions in `baseline_report.md`.
+4. Write `baseline_priority_recommendations_cn.md`.
