@@ -1,0 +1,22 @@
+{
+  "document_name": "unknown",
+  "source_files": [],
+  "requirements": [
+    {
+      "requirement_id": "ORG-001",
+      "section": "unknown",
+      "statement": "unknown",
+      "category": "unknown",
+      "priority": "unknown",
+      "source_excerpt": "unknown"
+    }
+  ],
+  "strategy_signals": [
+    {
+      "theme": "unknown",
+      "description": "unknown",
+      "evidence": "unknown"
+    }
+  ],
+  "notes": []
+}

@@ -1,0 +1,23 @@
+{
+  "document_name": "unknown",
+  "source_files": [],
+  "requirements": [
+    {
+      "requirement_id": "CIS-1",
+      "section": "unknown",
+      "statement": "unknown",
+      "category": "unknown",
+      "service": "unknown",
+      "severity": "unknown",
+      "source_excerpt": "unknown"
+    }
+  ],
+  "benchmark_themes": [
+    {
+      "theme": "unknown",
+      "description": "unknown",
+      "evidence": "unknown"
+    }
+  ],
+  "notes": []
+}

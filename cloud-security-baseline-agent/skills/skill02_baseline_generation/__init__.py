@@ -1,0 +1,1 @@
+"""Skill02 package."""

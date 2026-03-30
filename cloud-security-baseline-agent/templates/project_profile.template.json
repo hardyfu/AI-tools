@@ -1,0 +1,46 @@
+{
+  "case_metadata": {
+    "case_name": "unknown",
+    "case_directory": "cases/<case_name>",
+    "project_goal": "Generate a baseline from a global policy and a third-party standard",
+    "status": "bootstrapped"
+  },
+  "analysis_scope": {
+    "global_policy_name": "unknown",
+    "third_party_standard_name": "unknown",
+    "target_platform": "unknown",
+    "analysis_objective": "Parse two source documents, classify their overlaps, and generate a complete baseline package",
+    "assumptions": [
+      "The workflow accepts PDF, markdown, or text source documents",
+      "Skill01 stays deterministic and parse-only",
+      "Skill02 uses the online Qwen model through the DashScope compatible endpoint",
+      "Skill03 uses a stronger Qwen model to finalize the publication-oriented baseline document"
+    ]
+  },
+  "inputs": {
+    "global_policy_directory": "cases/<case_name>/input/global_policy",
+    "third_party_standard_directory": "cases/<case_name>/input/third_party_standard"
+  },
+  "output_expectations": {
+    "global_policy_parse": "Structured parse artifact for the global policy",
+    "third_party_standard_parse": "Structured parse artifact for the third-party standard",
+    "baseline_analysis": "Machine-readable synthesis and classification artifact",
+    "baseline_report": "Markdown report summarizing analysis and resulting baseline decisions",
+    "baseline_controls": "Markdown control list with traceability to both sources",
+    "final_baseline_xlsx": "Production workbook with fixed sheets and validated schema for baseline review and downstream operations"
+  },
+  "model_runtime": {
+    "provider": "dashscope",
+    "dashscope": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "text_model": "qwen3.5-plus",
+      "vision_model": "qwen2.5-vl-72b-instruct",
+      "finalization_model": "qwen3-max",
+      "timeout_seconds": 180,
+      "max_tokens": 1200,
+      "enable_thinking": false
+    }
+  }
+}
