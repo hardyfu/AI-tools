@@ -1,6 +1,6 @@
 ---
 name: skill02-baseline-generation
-description: Use this skill when structured parse artifacts already exist for a global policy and a third-party standard, and the workflow must classify overlaps, carry-forward obligations, platform-specific additions, and deferred items in order to generate a complete baseline package. This skill uses the parser outputs from skill01 as the primary input to the online Qwen model `qwen3.5-plus` via DashScope compatible API, with deterministic matching used only to build candidate context and fallback behavior.
+description: Use this skill when structured parse artifacts already exist for a global policy and a third-party standard, and the workflow must classify overlaps, carry-forward obligations, platform-specific additions, and deferred items in order to generate a complete baseline package. This skill uses the parser outputs from skill01 as the primary input to Azure OpenAI, with deterministic matching used only to build candidate context and fallback behavior.
 ---
 
 # Skill02 Baseline Generation
@@ -47,7 +47,7 @@ Consume the two parse artifacts and generate a complete baseline package with:
 
 1. Load both parse artifacts.
 2. Build candidate alignments between third-party requirements and global policy requirements.
-3. Send the parser outputs and candidate alignments to `qwen3.5-plus` through DashScope, with `enable_thinking=false`.
+3. Send the parser outputs and candidate alignments to the configured Azure OpenAI deployment, using `gpt-5.4-mini` for classification.
 4. Let the LLM produce the baseline action and rationale for each requirement.
 5. Generate analysis and reporting artifacts.
 6. Write the baseline outputs.

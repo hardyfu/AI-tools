@@ -13,8 +13,8 @@
     "assumptions": [
       "The workflow accepts PDF, markdown, or text source documents",
       "Skill01 stays deterministic and parse-only",
-      "Skill02 uses the online Qwen model through the DashScope compatible endpoint",
-      "Skill03 uses a stronger Qwen model to finalize the publication-oriented baseline document"
+      "Skill02 uses Azure OpenAI for baseline classification and analysis",
+      "Skill03 uses Azure OpenAI for final workbook wording and summaries"
     ]
   },
   "inputs": {
@@ -30,17 +30,15 @@
     "final_baseline_xlsx": "Production workbook with fixed sheets and validated schema for baseline review and downstream operations"
   },
   "model_runtime": {
-    "provider": "dashscope",
-    "dashscope": {
+    "provider": "azure_openai",
+    "azure_openai": {
       "enabled": true,
       "api_key": "",
-      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      "text_model": "qwen3.5-plus",
-      "vision_model": "qwen2.5-vl-72b-instruct",
-      "finalization_model": "qwen3-max",
+      "endpoint": "https://elisecamea.cognitiveservices.azure.com/",
+      "api_version": "2024-12-01-preview",
+      "deployment": "gpt-5.4-mini",
       "timeout_seconds": 180,
-      "max_tokens": 1200,
-      "enable_thinking": false
+      "max_completion_tokens": 1200
     }
   }
 }

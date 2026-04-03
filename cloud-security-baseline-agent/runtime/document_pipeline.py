@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from runtime.ollama_runtime import OllamaRuntime
+from runtime.ollama_runtime import AzureOpenAIRuntime as OllamaRuntime
 from runtime.text_utils import (
     build_theme_summary,
     categorize_text,
@@ -589,7 +589,7 @@ def llm_enhance_parse(
         "added_requirements": [],
     }
     if runtime is None:
-        result["notes"].append("Ollama runtime unavailable; parse stayed deterministic.")
+        result["notes"].append("Azure OpenAI runtime unavailable; parse stayed deterministic.")
         return result
 
     system_prompt = (
@@ -788,7 +788,7 @@ def llm_classify_baseline_actions(
 ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
     debug_chunks: list[dict[str, Any]] = []
     if runtime is None:
-        return {}, [{"status": "skipped", "reason": "Ollama runtime unavailable"}]
+        return {}, [{"status": "skipped", "reason": "Azure OpenAI runtime unavailable"}]
 
     candidates: list[dict[str, Any]] = []
     for third_party_item in third_party_requirements:

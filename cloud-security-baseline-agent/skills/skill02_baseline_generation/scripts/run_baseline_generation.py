@@ -14,7 +14,7 @@ from runtime.document_pipeline import (
     load_json,
     write_json,
 )
-from runtime.ollama_runtime import build_ollama_runtime
+from runtime.ollama_runtime import build_azure_openai_runtime
 from runtime.text_utils import clean_statement_noise
 from skills.baseline_writer.scripts.agent04_runner import run as run_baseline_writer
 
@@ -52,7 +52,8 @@ def _validate_mapping_item(item: dict, global_requirement_ids: set[str]) -> None
     if len(rationale) < 20:
         raise RuntimeError(f"skill02 produced an insufficient rationale for {benchmark_id}")
 
-    if str(item.get("classification_method", "")).strip() != "qwen_online":
+    classification_method = str(item.get("classification_method", "")).strip()
+    if classification_method not in {"azure_openai_online", "qwen_online"}:
         raise RuntimeError(f"skill02 produced invalid classification_method for {benchmark_id}")
 
     candidate_matches = item.get("candidate_matches")
@@ -440,8 +441,8 @@ def run(case_name: str) -> tuple[Path, Path, Path, Path, Path, Path, Path, Path,
         raise FileNotFoundError("Missing parse artifacts. Run skill01 first for both document roles.")
 
     profile = load_json(working_dir / "project_profile.json")
-    ollama_runtime, runtime_status = build_ollama_runtime(profile)
-    if ollama_runtime is None:
+    azure_runtime, runtime_status = build_azure_openai_runtime(profile)
+    if azure_runtime is None:
         raise RuntimeError(f"skill02 requires LLM runtime, but it is unavailable: {runtime_status.get('skip_reason')}")
     global_data = load_json(global_path)
     third_party_data = load_json(third_party_path)
@@ -449,7 +450,7 @@ def run(case_name: str) -> tuple[Path, Path, Path, Path, Path, Path, Path, Path,
     third_party_requirements = third_party_data.get("requirements", [])
     global_by_id = {item["requirement_id"]: item for item in global_requirements}
     llm_decisions, llm_debug = llm_classify_baseline_actions(
-        runtime=ollama_runtime,
+        runtime=azure_runtime,
         global_requirements=global_requirements,
         third_party_requirements=third_party_requirements,
     )
@@ -512,7 +513,7 @@ def run(case_name: str) -> tuple[Path, Path, Path, Path, Path, Path, Path, Path,
             "baseline_action": action,
             "decision": ACTION_TO_DECISION[action],
             "rationale": rationale,
-            "classification_method": "qwen_online",
+            "classification_method": "azure_openai_online",
         }
         if selected_match and action != "new_baseline_control":
             global_item = dict(selected_match["requirement"])

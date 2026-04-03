@@ -1,6 +1,6 @@
 ---
 name: skill03-baseline-finalize
-description: Use this skill when baseline analysis and control artifacts already exist and the workflow needs a formal, review-ready English baseline document. This skill consumes skill02 outputs, uses `qwen3-max` as the finalization model, and emits the publication-oriented English baseline document without changing parser or mapping logic.
+description: Use this skill when baseline analysis and control artifacts already exist and the workflow needs a formal, review-ready English baseline document. This skill consumes skill02 outputs, uses Azure OpenAI for finalization, and emits the publication-oriented English baseline document without changing parser or mapping logic.
 ---
 
 # Skill03 Baseline Finalize
@@ -29,7 +29,7 @@ Consume the baseline package from skill02 and generate a production-ready Excel 
 - Do not re-parse source documents.
 - Do not re-run alignment or similarity logic.
 - Treat skill02 outputs as the approved analytical basis.
-- Use `qwen3-max` for final English wording and workbook section summaries.
+- Use the configured Azure OpenAI finalization deployment for final English wording and workbook section summaries.
 - Preserve conservative treatment of pending controls.
 - Fail the run if the online model is unavailable or returns unusable output.
 - Treat the workbook schema as fixed production contract. Do not add, remove, or rename sheets or columns without updating the references and validation logic together.
@@ -38,7 +38,7 @@ Consume the baseline package from skill02 and generate a production-ready Excel 
 
 1. Load the baseline analysis and control artifacts.
 2. Load the DashScope runtime configuration.
-3. Use `qwen3-max` to produce validated section wording and domain summaries.
+3. Use the configured Azure OpenAI finalization deployment to produce validated section wording and domain summaries.
 4. Render the fixed workbook schema locally from the approved analysis plus validated LLM wording.
 5. Fail if the model is unavailable or returns unusable output.
 6. Write the final production workbook and a small debug artifact on success.

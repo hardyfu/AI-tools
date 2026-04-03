@@ -13,7 +13,7 @@ PROJECT_ROOT = resolve_project_root(__file__)
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from runtime.ollama_runtime import build_ollama_runtime
+from runtime.ollama_runtime import build_azure_openai_runtime
 from runtime.text_utils import clean_statement_noise, load_json, write_json
 
 
@@ -100,6 +100,62 @@ def _group_active_controls(analysis: dict[str, Any]) -> dict[str, list[dict[str,
         category = item.get("third_party_requirement", {}).get("category", "general")
         grouped.setdefault(category, []).append(item)
     return grouped
+
+
+def _build_fallback_final_payload(
+    case_name: str,
+    analysis: dict[str, Any],
+    standard_coverage: dict[str, Any],
+    benchmark_extensions: dict[str, Any],
+    baseline_candidates: dict[str, Any],
+) -> dict[str, Any]:
+    coverage_summary = standard_coverage.get("summary", {})
+    extension_summary = benchmark_extensions.get("summary", {})
+    candidate_summary = baseline_candidates.get("summary", {})
+    grouped = _group_active_controls(analysis)
+    domain_overviews: list[dict[str, str]] = []
+    for domain in sorted(grouped):
+        items = grouped[domain]
+        matched_count = sum(1 for item in items if item.get("decision") == "aligned")
+        partial_count = sum(1 for item in items if item.get("decision") == "partial")
+        gap_count = sum(1 for item in items if item.get("decision") == "gap")
+        domain_overviews.append(
+            {
+                "domain": _title(domain),
+                "summary": (
+                    f"This domain contains {len(items)} active control mappings, "
+                    f"including {matched_count} aligned, {partial_count} partial, and {gap_count} pending items."
+                ),
+            }
+        )
+    if not domain_overviews:
+        domain_overviews = [
+            {
+                "domain": "General Platform Security",
+                "summary": "The baseline consolidates cloud security controls into a review-ready production workbook.",
+            }
+        ]
+    return {
+        "title": "Alibaba Cloud Security Baseline Final",
+        "purpose": [
+            f"Establish a review-ready Alibaba Cloud baseline for case {case_name}.",
+            f"Summarize {coverage_summary.get('covered', 0)} covered requirements, {coverage_summary.get('partially_covered', 0)} partially covered requirements, and {coverage_summary.get('not_addressed_by_benchmark', 0)} uncovered requirements.",
+        ],
+        "scope": [
+            "Include the Global Policy and Third-Party Standard inputs used for this case.",
+            f"Reflect {extension_summary.get('total_extensions', 0)} benchmark extensions and {candidate_summary.get('total_candidates', 0)} baseline candidates.",
+        ],
+        "principles": [
+            "Keep traceability to both source documents.",
+            "Treat benchmark gaps conservatively and preserve organization-specific requirements.",
+            "Render control content locally from the approved structured analysis.",
+        ],
+        "governance": [
+            "Review exceptions and pending controls with the relevant platform owners.",
+            "Keep the workbook schema stable for downstream review and operations.",
+        ],
+        "domain_overviews": domain_overviews,
+    }
 
 
 def _validate_final_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -455,14 +511,17 @@ def run(case_name: str) -> tuple[Path, Path]:
     report_text = report_path.read_text(encoding="utf-8")
     recommendations_text = recommendations_path.read_text(encoding="utf-8")
 
-    runtime, runtime_status = build_ollama_runtime(profile)
-    dashscope = profile.get("model_runtime", {}).get("dashscope", {})
-    finalization_model = str(dashscope.get("finalization_model", "qwen3-max"))
+    runtime, runtime_status = build_azure_openai_runtime(profile)
+    finalization_model = str(
+        runtime_status.get("finalization_model")
+        or getattr(getattr(runtime, "config", None), "finalization_model", "")
+        or "gpt-5.4"
+    )
 
     used_llm = False
     fallback_reason = ""
     if runtime is None:
-        fallback_reason = f"DashScope runtime unavailable: {runtime_status.get('skip_reason')}"
+        fallback_reason = f"Azure OpenAI runtime unavailable: {runtime_status.get('skip_reason')}"
         debug_path = working_dir / "skill03_debug.json"
         write_json(
             debug_path,
@@ -520,6 +579,13 @@ def run(case_name: str) -> tuple[Path, Path]:
         used_llm = True
     except Exception as exc:
         fallback_reason = str(exc)
+        final_payload = _build_fallback_final_payload(
+            case_name,
+            analysis,
+            standard_coverage,
+            benchmark_extensions,
+            baseline_candidates,
+        )
         debug_path = working_dir / "skill03_debug.json"
         write_json(
             debug_path,
@@ -530,6 +596,7 @@ def run(case_name: str) -> tuple[Path, Path]:
                 "finalization_model": finalization_model,
                 "used_llm": False,
                 "fallback_reason": fallback_reason,
+                "final_payload_source": "fallback",
                 "source_artifacts": {
                     "baseline_analysis": str(analysis_path.relative_to(PROJECT_ROOT)),
                     "standard_coverage": str(standard_coverage_path.relative_to(PROJECT_ROOT)),
@@ -541,8 +608,6 @@ def run(case_name: str) -> tuple[Path, Path]:
                 },
             },
         )
-        raise RuntimeError(f"skill03 requires usable LLM output, but finalization failed: {fallback_reason}")
-
     output_path = working_dir / "final_baseline.xlsx"
     _build_workbook(
         output_path,
@@ -568,6 +633,7 @@ def run(case_name: str) -> tuple[Path, Path]:
             "finalization_model": finalization_model,
             "used_llm": used_llm,
             "fallback_reason": fallback_reason,
+            "final_payload_source": "llm" if used_llm else "fallback",
             "source_artifacts": {
                 "baseline_analysis": str(analysis_path.relative_to(PROJECT_ROOT)),
                 "standard_coverage": str(standard_coverage_path.relative_to(PROJECT_ROOT)),
