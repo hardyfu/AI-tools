@@ -1,0 +1,291 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo App</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding-top: 2rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: #fff;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            height: fit-content;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 1.25rem;
+            font-size: 1.75rem;
+        }
+
+        .input-section {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        #todo-input, #edit-input {
+            padding: 0.6rem 0.8rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        #todo-input:focus, #edit-input:focus {
+            border-color: #007bff;
+        }
+
+        #todo-input {
+            flex: 1;
+        }
+
+        #add-btn, #save-edit, #cancel-edit {
+            padding: 0.6rem 1rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            color: #fff;
+        }
+
+        #add-btn { background-color: #007bff; }
+        #add-btn:hover { background-color: #0056b3; }
+
+        .todo-list {
+            list-style: none;
+            margin-bottom: 1rem;
+        }
+
+        .todo-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 0.5rem;
+            border-bottom: 1px solid #eee;
+            gap: 0.5rem;
+        }
+
+        .todo-item:last-child { border-bottom: none; }
+
+        .todo-item.completed .todo-text {
+            text-decoration: line-through;
+            color: #888;
+        }
+
+        .todo-text { flex: 1; margin: 0 0.5rem; }
+
+        .action-btn {
+            padding: 4px 8px;
+            border: 1px solid #ccc;
+            background: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .action-btn:hover { background: #e9ecef; }
+        .delete-btn { color: #dc3545; border-color: #dc3545; }
+        .delete-btn:hover { background: #dc3545; color: #fff; }
+
+        #edit-interface {
+            display: none;
+            flex-direction: row;
+            gap: 8px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            margin-top: 0.5rem;
+        }
+
+        #edit-input { flex: 1; padding: 0.5rem; }
+        #save-edit { background: #28a745; }
+        #save-edit:hover { background: #218838; }
+        #cancel-edit { background: #6c757d; }
+        #cancel-edit:hover { background: #5a6268; }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <h1>Todo List</h1>
+        
+        <section class="input-section">
+            <input type="text" id="todo-input" placeholder="Enter a new todo...">
+            <button id="add-btn">Add</button>
+        </section>
+
+        <ul id="todo-list" class="todo-list"></ul>
+
+        <div id="edit-interface">
+            <input type="text" id="edit-input" placeholder="Edit todo...">
+            <button id="save-edit">Save</button>
+            <button id="cancel-edit">Cancel</button>
+        </div>
+    </main>
+
+    <script>
+        // State Management
+        class TodoStore {
+            constructor() {
+                this.todos = [];
+                this.nextId = 1;
+            }
+            add(text) {
+                const todo = { id: this.nextId++, text, completed: false };
+                this.todos.push(todo);
+                return todo;
+            }
+            complete(id) {
+                const todo = this.todos.find(t => t.id === id);
+                if (todo) todo.completed = !todo.completed;
+                return todo || null;
+            }
+            edit(id, newText) {
+                const todo = this.todos.find(t => t.id === id);
+                if (todo) todo.text = newText;
+                return todo || null;
+            }
+            delete(id) {
+                const index = this.todos.findIndex(t => t.id === id);
+                if (index !== -1) {
+                    this.todos.splice(index, 1);
+                    return true;
+                }
+                return false;
+            }
+            getAll() {
+                return [...this.todos];
+            }
+        }
+
+        const store = new TodoStore();
+        const todoListEl = document.getElementById('todo-list');
+        const inputEl = document.getElementById('todo-input');
+        const addBtn = document.getElementById('add-btn');
+        const editInterface = document.getElementById('edit-interface');
+        const editInput = document.getElementById('edit-input');
+        const saveEditBtn = document.getElementById('save-edit');
+        const cancelEditBtn = document.getElementById('cancel-edit');
+
+        let editingId = null;
+
+        // Utilities
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Render
+        function render() {
+            todoListEl.innerHTML = '';
+            store.getAll().forEach(todo => {
+                const li = document.createElement('li');
+                li.dataset.id = todo.id;
+                li.className = `todo-item ${todo.completed ? 'completed' : ''}`;
+                
+                li.innerHTML = `
+                    <input type="checkbox" class="toggle-btn" ${todo.completed ? 'checked' : ''}>
+                    <span class="todo-text">${escapeHtml(todo.text)}</span>
+                    <button class="action-btn edit-btn">Edit</button>
+                    <button class="action-btn delete-btn">Delete</button>
+                `;
+                todoListEl.appendChild(li);
+            });
+        }
+
+        // Add Handler
+        function handleAdd() {
+            const text = inputEl.value.trim();
+            if (!text) return;
+            store.add(text);
+            inputEl.value = '';
+            inputEl.focus();
+            render();
+        }
+
+        // Edit Handlers
+        function openEdit(id) {
+            editingId = id;
+            const todo = store.getAll().find(t => t.id === id);
+            editInput.value = todo.text;
+            editInterface.style.display = 'flex';
+            editInput.focus();
+        }
+
+        function saveEdit() {
+            const newText = editInput.value.trim();
+            if (newText && editingId) {
+                store.edit(editingId, newText);
+                render();
+            }
+            closeEdit();
+        }
+
+        function closeEdit() {
+            editingId = null;
+            editInput.value = '';
+            editInterface.style.display = 'none';
+        }
+
+        saveEditBtn.addEventListener('click', saveEdit);
+        cancelEditBtn.addEventListener('click', closeEdit);
+        editInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') saveEdit();
+            if (e.key === 'Escape') closeEdit();
+        });
+
+        // Event Delegation
+        todoListEl.addEventListener('change', (e) => {
+            if (e.target.classList.contains('toggle-btn')) {
+                const id = parseInt(e.target.closest('li').dataset.id, 10);
+                store.complete(id);
+                render();
+            }
+        });
+
+        todoListEl.addEventListener('click', (e) => {
+            const li = e.target.closest('li');
+            if (!li) return;
+            const id = parseInt(li.dataset.id, 10);
+
+            if (e.target.classList.contains('delete-btn')) {
+                store.delete(id);
+                render();
+            } else if (e.target.classList.contains('edit-btn')) {
+                openEdit(id);
+            }
+        });
+
+        addBtn.addEventListener('click', handleAdd);
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') handleAdd();
+        });
+
+        // Initial Render
+        render();
+    </script>
+</body>
+</html>
+```
