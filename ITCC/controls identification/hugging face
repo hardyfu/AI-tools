@@ -1,0 +1,5 @@
+# 确保安装了 CLI 工具
+pip install huggingface_hub
+
+# 下载模型到指定目录 (以 Qwen 为例)
+huggingface-cli download mlx-community/Qwen2.5-7B-Instruct-4bit --local-dir ./models/qwen_7b
