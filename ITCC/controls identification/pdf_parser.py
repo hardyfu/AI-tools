@@ -1,12 +1,16 @@
-import sys
+import base64
 import logging
+import os
 import re
+import sys
 import unicodedata
+from io import BytesIO
 from pathlib import Path
 import numpy as np
 import pdfplumber
 import tkinter as tk
 from tkinter import filedialog
+from openai import OpenAI
 try:
     from rapidocr_onnxruntime import RapidOCR
 except ImportError:
@@ -16,9 +20,23 @@ except ImportError:
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
 # ================= 配置区域 =================
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format='%(message)s', stream=sys.stdout)
 logger = logging.getLogger(__name__)
 OCR_TRIGGER_THRESHOLD = 50
+QWEN_VISION_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+QWEN_VISION_MODEL_NAME = "qwen3.6-plus"
+QWEN_VISION_MAX_TOKENS = 4000
+
+
+def get_env_value(*names):
+    for name in names:
+        value = os.getenv(name, "")
+        if value:
+            return value
+    return ""
+
+
+QWEN_VISION_API_KEY = get_env_value("DASHSCOPE_API_KEY")
 DEFAULT_SECTION_PATTERN = re.compile(r"^第[一二三四五六七八九十百零〇两0-9]{1,10}节[:：\s]*")
 DEFAULT_ARTICLE_PATTERN = re.compile(r"^第[一二三四五六七八九十百零〇两0-9]{1,10}条[:：\s]*")
 DEFAULT_CHAPTER_PATTERN = re.compile(r"^第[一二三四五六七八九十百零〇两0-9]{1,10}章[:：\s]*")
@@ -88,9 +106,18 @@ PARSER_PROFILES = {
 
 class PDFParser:
     def __init__(self):
+        self.qwen_client = None
+        if QWEN_VISION_API_KEY:
+            self.qwen_client = OpenAI(
+                api_key=QWEN_VISION_API_KEY,
+                base_url=QWEN_VISION_BASE_URL,
+            )
+        else:
+            logger.warning("DASHSCOPE_API_KEY 未设置，低文本页将无法使用 Qwen 图片理解。")
+
         self.ocr_engine = None
         if RapidOCR is None:
-            logger.warning("RapidOCR 未安装，低文本页将跳过 OCR。")
+            logger.warning("RapidOCR 未安装，Qwen 图片理解失败时无本地 OCR 兜底。")
             return
 
         try:
@@ -98,6 +125,68 @@ class PDFParser:
         except Exception as exc:
             logger.error(f"初始化 OCR 引擎失败: {exc}")
             self.ocr_engine = None
+
+    def _render_page_image(self, page_obj, page_num):
+        try:
+            return page_obj.to_image(resolution=300).original
+        except Exception as exc:
+            logger.warning(f"  -> 第 {page_num} 页渲染图片失败: {exc}")
+            return None
+
+    def _encode_image_as_base64_png(self, pil_image):
+        image_buffer = BytesIO()
+        pil_image.save(image_buffer, format="PNG")
+        return base64.b64encode(image_buffer.getvalue()).decode("utf-8")
+
+    def _process_page_with_qwen_vision(self, page_obj, page_num):
+        """使用 Qwen 图片理解能力转写低文本页。"""
+        if self.qwen_client is None:
+            logger.warning(f"  -> 第 {page_num} 页未执行 Qwen 图片理解: DASHSCOPE_API_KEY 未设置")
+            return ""
+
+        pil_image = self._render_page_image(page_obj, page_num)
+        if pil_image is None:
+            return ""
+
+        try:
+            base64_image = self._encode_image_as_base64_png(pil_image)
+            completion = self.qwen_client.chat.completions.create(
+                model=QWEN_VISION_MODEL_NAME,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{base64_image}"
+                                },
+                            },
+                            {
+                                "type": "text",
+                                "text": (
+                                    "请对这页法律法规 PDF 截图进行 OCR 转写。\n"
+                                    "要求：\n"
+                                    "1. 只输出图片中可见的正文文字。\n"
+                                    "2. 保留原有阅读顺序和换行，特别是“第X章”“第X节”“第X条”“（一）”等编号。\n"
+                                    "3. 不要总结、解释、补全、翻译或改写。\n"
+                                    "4. 如果没有可识别的正文文字，返回空白。"
+                                ),
+                            },
+                        ],
+                    }
+                ],
+                max_tokens=QWEN_VISION_MAX_TOKENS,
+                extra_body={"enable_thinking": True},
+            )
+
+            content = completion.choices[0].message.content
+            if content is None:
+                return ""
+            return content.strip()
+        except Exception as exc:
+            logger.warning(f"  -> 第 {page_num} 页 Qwen 图片理解失败: {exc}")
+            return ""
 
     def _process_page_with_ocr(self, page_obj, page_num):
         """OCR 识别"""
@@ -403,14 +492,18 @@ class PDFParser:
                 for i, page in enumerate(pdf.pages):
                     raw_text = page.extract_text()
                     if not raw_text or len(raw_text.strip()) < OCR_TRIGGER_THRESHOLD:
-                        print(f"  -> 第 {i + 1} 页 OCR识别中...")
-                        text = self._process_page_with_ocr(page, i + 1)
+                        print(f"  -> 第 {i + 1} 页 pdfplumber 文本不足，使用 Qwen 图片理解识别中...")
+                        text = self._process_page_with_qwen_vision(page, i + 1)
+                        if not text:
+                            print(f"  -> 第 {i + 1} 页 Qwen 未返回文本，尝试 RapidOCR 兜底...")
+                            text = self._process_page_with_ocr(page, i + 1)
                     else:
                         text = raw_text
 
                     if text:
                         cleaned_text = self._clean_page_noise(text, profile)
-                        raw_pages_text.append(cleaned_text)
+                        if cleaned_text:
+                            raw_pages_text.append(cleaned_text)
 
             full_text = "\n".join(raw_pages_text)
             return self.parse_legal_articles(full_text, profile)

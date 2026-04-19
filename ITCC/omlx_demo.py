@@ -1,4 +1,5 @@
 from openai import OpenAI
+import time
 
 # 初始化客户端，指向本地 oMLX 服务
 client = OpenAI(
@@ -7,13 +8,15 @@ client = OpenAI(
 )
 
 # 你的模型名称（需替换为 oMLX 中实际加载的模型目录名或别名，例如 "Qwen3.5-9B"）
-MODEL_NAME = "MLX-Qwen3.5-9B-Claude-4.6-Opus-Reasoning-Distilled-v2-8bit"
+MODEL_NAME = "gemma-4-e4b-it-4bit"
 
 
 def chat_with_omlx():
     print(f"正在调用 oMLX 模型: {MODEL_NAME} ...\n")
 
     try:
+        start_time = time.perf_counter()
+
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
@@ -21,12 +24,15 @@ def chat_with_omlx():
                 {"role": "user", "content": "请用 Python 写一个简单的斐波那契数列生成器。"}
             ],
             temperature=0.3,
-            max_tokens=8182
+            # max_tokens=8182
         )
+
+        elapsed = time.perf_counter() - start_time
 
         # 打印模型的回复
         print("🤖 模型回复：")
         print(response.choices[0].message.content)
+        print(f"\n⏱️ {MODEL_NAME} 本次调用耗时: {elapsed:.3f} 秒")
 
     except Exception as e:
         print(f"调用失败: {e}")

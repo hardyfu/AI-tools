@@ -6,43 +6,22 @@ from openai import OpenAI
 from pdf_parser import PDFParser, select_pdf_file
 
 # ================= 测试模式配置 =================
-TEST_MODE = False  # 设置为True时只处理前2章
+TEST_MODE = True  # 设置为True时只处理前2章
 MAX_CHAPTERS_IN_TEST = 2
 # ===============================================
 
 # ================= 配置区域 =================
-# DeepSeek API 配置
-DEEPSEEK_BASE_URL = "https://api.deepseek.com/beta"
-DEEPSEEK_CHAT_MODEL_NAME = "deepseek-chat"
-DEEPSEEK_REASONER_MODEL_NAME = "deepseek-reasoner"
-
-# Qwen API 配置（阿里云百炼 OpenAI-compatible 模式）
-QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-QWEN_MODEL_NAME = "qwen3.6-plus"
-
-# 后端选择配置
-DEFAULT_BACKEND = os.getenv("LLM_BACKEND", "deepseek").lower()  # 可选: "deepseek" 或 "qwen"
+# 固定使用本地 oMLX OpenAI-compatible 服务
+OMLX_BASE_URL = "http://localhost:8000/v1"
+OMLX_API_KEY = "510918123Fu!"
+OMLX_MODEL_NAME = "Qwen3.5-2B-6bit"
 
 BASE_DIR = Path(__file__).resolve().parent
 SKILLS_DIR = BASE_DIR / "skills"
 
-
-def get_env_value(*names):
-    for name in names:
-        value = os.getenv(name, "")
-        if value:
-            return value
-    return ""
-
-
-DEEPSEEK_API_KEY = get_env_value("DEEPSEEK_API_KEY")
-QWEN_API_KEY = get_env_value("DASHSCOPE_API_KEY")
-
 EVIDENCE_KEYWORDS = (
     "截图", "报表", "记录", "日志", "台账", "配置", "工单", "审批", "清单",
-    "文件", "证据", "报告", "任命书", "纪要", "演练", "告警", "策略",
-    "文档", "证书", "合同", "备份", "监控", "审计", "检查", "测试",
-    "凭证", "授权", "备案", "登记", "统计", "分析", "评估", "验证"
+    "文件", "证据", "报告", "任命书", "纪要", "演练", "告警", "策略"
 )
 
 TARGET_ENTITY_KEYWORDS = (
@@ -75,15 +54,15 @@ class BaseLLMBackend:
     def build_messages(self, system_prompt: str, user_prompt: str):
         raise NotImplementedError
 
-    def generate(self, messages, max_tokens: int = 2500, task: str = "default") -> str:
+    def generate(self, messages, max_tokens: int = 2500) -> str:
         raise NotImplementedError
 
     def cleanup(self):
         pass
 
 
-class QwenBackend(BaseLLMBackend):
-    name = "qwen"
+class OMLXBackend(BaseLLMBackend):
+    name = "omlx"
 
     def __init__(self, base_url: str, api_key: str, model_name: str):
         self.base_url = base_url
@@ -92,12 +71,12 @@ class QwenBackend(BaseLLMBackend):
         self.client: OpenAI | None = None
 
     def initialize(self):
-        print(f"\n🚀 正在连接 Qwen API: {self.base_url} / {self.model_name} ...")
+        print(f"\n🚀 正在连接 oMLX 服务: {self.base_url} / {self.model_name} ...")
         self.client = OpenAI(
             base_url=self.base_url,
             api_key=self.api_key
         )
-        print("✅ Qwen 客户端初始化完成")
+        print("✅ oMLX 客户端初始化完成")
 
     def build_messages(self, system_prompt: str, user_prompt: str):
         return [
@@ -105,132 +84,26 @@ class QwenBackend(BaseLLMBackend):
             {"role": "user", "content": user_prompt},
         ]
 
-    def enable_thinking_for_task(self, task: str) -> bool:
-        return task == "control_generation"
-
-    def generate(self, messages, max_tokens: int = 2500, task: str = "default") -> str:
+    def generate(self, messages, max_tokens: int = 2500) -> str:
         if self.client is None:
-            raise RuntimeError("Qwen 客户端尚未初始化，请先调用 initialize()")
+            raise RuntimeError("oMLX 客户端尚未初始化，请先调用 initialize()")
 
-        enable_thinking = self.enable_thinking_for_task(task)
-        try:
-            completion = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                max_tokens=max_tokens,
-                extra_body={"enable_thinking": enable_thinking},
-                stream=True,
-            )
-
-            content_parts = []
-            for chunk in completion:
-                if not chunk.choices:
-                    continue
-                delta = chunk.choices[0].delta
-                content = getattr(delta, "content", None)
-                if content:
-                    content_parts.append(content)
-            return "".join(content_parts).strip()
-        except Exception as e:
-            print(f"❌ Qwen API 调用失败: {e}")
-            if "api_key" in str(e).lower() or "authentication" in str(e).lower():
-                print("⚠️  请检查 DASHSCOPE_API_KEY 是否正确")
-            raise
-
-
-class DeepSeekBackend(BaseLLMBackend):
-    name = "deepseek"
-
-    def __init__(self, base_url: str, api_key: str, chat_model_name: str, reasoner_model_name: str):
-        self.base_url = base_url
-        self.api_key = api_key
-        self.chat_model_name = chat_model_name
-        self.reasoner_model_name = reasoner_model_name
-        self.client: OpenAI | None = None
-
-    def initialize(self):
-        print(
-            f"\n🚀 正在连接 DeepSeek API: {self.base_url} "
-            f"/ 摘要:{self.chat_model_name} 控制点:{self.reasoner_model_name} ..."
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=messages,
+            temperature=0.0,
+            max_tokens=max_tokens
         )
-        self.client = OpenAI(
-            base_url=self.base_url,
-            api_key=self.api_key
-        )
-        print("✅ DeepSeek 客户端初始化完成")
 
-    def build_messages(self, system_prompt: str, user_prompt: str):
-        return [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-
-    def model_for_task(self, task: str) -> str:
-        if task == "control_generation":
-            return self.reasoner_model_name
-        return self.chat_model_name
-
-    def generate(self, messages, max_tokens: int = 2500, task: str = "default") -> str:
-        if self.client is None:
-            raise RuntimeError("DeepSeek 客户端尚未初始化，请先调用 initialize()")
-
-        model_name = self.model_for_task(task)
-        try:
-            response = self.client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                max_tokens=max_tokens
-            )
-
-            content = response.choices[0].message.content
-            if content is None:
-                return ""
-            return content.strip()
-        except Exception as e:
-            print(f"❌ DeepSeek API 调用失败: {e}")
-            if "api_key" in str(e).lower() or "authentication" in str(e).lower():
-                print("⚠️  请检查 DEEPSEEK_API_KEY 是否正确")
-            raise
-
-
-def prompt_backend_choice():
-    default_choice = DEFAULT_BACKEND if DEFAULT_BACKEND in {"deepseek", "qwen"} else "deepseek"
-    print("\n请选择本次运行使用的模型后端：")
-    print("  1. DeepSeek（章节摘要/评审: deepseek-chat；控制点生成: deepseek-reasoner）")
-    print("  2. Qwen（始终 qwen3.6-plus；仅控制点生成启用 thinking）")
-    choice = input(f"请输入 1 或 2，直接回车默认 {default_choice}: ").strip().lower()
-
-    if not choice:
-        return default_choice
-    if choice in {"1", "deepseek", "d"}:
-        return "deepseek"
-    if choice in {"2", "qwen", "q"}:
-        return "qwen"
-
-    print(f"⚠️ 无法识别选择 [{choice}]，使用默认后端: {default_choice}")
-    return default_choice
+        content = response.choices[0].message.content
+        if content is None:
+            return ""
+        return content.strip()
 
 
 def select_backend():
-    backend_choice = prompt_backend_choice()
-
-    if backend_choice == "deepseek":
-        print("🧠 配置使用 DeepSeek 后端")
-        if not DEEPSEEK_API_KEY:
-            raise ValueError("DeepSeek API Key 未设置，请设置 DEEPSEEK_API_KEY 环境变量")
-        return DeepSeekBackend(
-            DEEPSEEK_BASE_URL,
-            DEEPSEEK_API_KEY,
-            DEEPSEEK_CHAT_MODEL_NAME,
-            DEEPSEEK_REASONER_MODEL_NAME,
-        )
-    elif backend_choice == "qwen":
-        print("🧠 配置使用 Qwen 后端")
-        if not QWEN_API_KEY:
-            raise ValueError("Qwen API Key 未设置，请设置 DASHSCOPE_API_KEY 环境变量")
-        return QwenBackend(QWEN_BASE_URL, QWEN_API_KEY, QWEN_MODEL_NAME)
-    else:
-        raise ValueError(f"未知的后端配置: {backend_choice}，请设置为 'deepseek' 或 'qwen'")
+    print("🧠 固定使用后端: oMLX")
+    return OMLXBackend(OMLX_BASE_URL, OMLX_API_KEY, OMLX_MODEL_NAME)
 
 
 # ===========================================
@@ -434,18 +307,16 @@ def append_to_file(file_path, text):
 
 
 def extract_valid_table_lines(response_text):
-    valid_lines = []
-    for raw_line in response_text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        if "---" in line or "涉及领域" in line or "控制目标" in line or "法律要求" in line:
-            continue
-        # 使用 split_markdown_row 验证是否为有效的5列表格行
-        cells = split_markdown_row(line)
-        if cells is not None:
-            valid_lines.append(line)
-    return valid_lines
+    return [
+        line
+        for line in (raw_line.strip() for raw_line in response_text.splitlines())
+        if line
+        and "|" in line
+        and "---" not in line
+        and "涉及领域" not in line
+        and "控制目标" not in line
+        and "法律要求" not in line
+    ]
 
 
 def main():
@@ -459,19 +330,21 @@ def main():
     output_file_path = BASE_DIR / f"{law_name}_合规矩阵.md"
     review_file_path = BASE_DIR / f"{law_name}_复核清单.md"
 
+    parser = PDFParser()
+    chapters_data = parser.extract_content(source_pdf_path)
+    if not chapters_data:
+        print("⚠️ 未能从 PDF 提取有效内容，程序结束。")
+        return
+
+
+
+
     # Load skills
     analyst_system_prompt = load_analyst_skill()
     auditor_system_prompt, valid_domains = load_auditor_skill()
     reviewer_system_prompt = load_reviewer_skill()
     backend = select_backend()
     backend.initialize()
-
-    print("\nStep 2: 正在解析 PDF 内容...")
-    parser = PDFParser()
-    chapters_data = parser.extract_content(source_pdf_path)
-    if not chapters_data:
-        print("⚠️ 未能从 PDF 提取有效内容，程序结束。")
-        return
 
     header = "| 涉及领域 | 控制目标 | 法律要求 | 控制点 | 类型 |\n| :--- | :--- | :--- | :--- | :--- |"
 
@@ -514,7 +387,7 @@ def main():
             f"请分析 **《{law_name}》** 的 **【{chapter_title}】**。"
         )
         try:
-            chapter_analysis = backend.generate(analyst_messages, max_tokens=300, task="chapter_analysis")
+            chapter_analysis = backend.generate(analyst_messages, max_tokens=300)
             print(f"      ✅ 章节摘要生成完成 ({len(chapter_analysis)} 字符)")
         except Exception as e:
             print(f"      ❌ 分析师阶段失败: {e}")
@@ -537,7 +410,7 @@ def main():
             )
 
             try:
-                response_text = backend.generate(messages, max_tokens=2500, task="control_generation")
+                response_text = backend.generate(messages, max_tokens=2500)
             except Exception as error:
                 print(f"         ❌ 模型调用失败: {error}")
                 write_review_entry(
@@ -548,6 +421,8 @@ def main():
                     article_ref
                 )
                 continue
+            finally:
+                backend.cleanup()
 
             valid_lines = []
             review_lines = []
@@ -568,14 +443,25 @@ def main():
 章节标题：{chapter_title}
 法律名称：{law_name}
 
-请基于评审员技能中的标准进行严格审查。请只输出以下三个标签之一：PASS、REVIEW 或 FAIL，不要输出任何其他内容。"""
+请基于评审员技能中的标准进行严格审查。"""
                 )
                 try:
-                    reviewer_response = backend.generate(reviewer_messages, max_tokens=50, task="review")
-                    reviewer_response = reviewer_response.strip().upper()
+                    reviewer_response = backend.generate(reviewer_messages, max_tokens=500)
 
-                    # Simplified parsing - only check for PASS, REVIEW, or FAIL
-                    if reviewer_response.startswith("PASS"):
+                    # Clean and parse reviewer response
+                    reviewer_response = reviewer_response.strip()
+
+                    # Enhanced parsing with multiple possible formats
+                    if reviewer_response.startswith("PASS") or "| PASS |" in reviewer_response:
+                        # Extract the actual line if reviewer returned modified version
+                        if "|" in reviewer_response and reviewer_response.count("|") >= 4:
+                            # Try to extract the table line from reviewer response
+                            parts = reviewer_response.split("|")
+                            if len(parts) >= 6:
+                                # Reconstruct table line from reviewer response
+                                extracted_line = "|" + "|".join(parts[1:6]) + "|"
+                                line = extracted_line
+
                         is_valid, reason, normalized_line = validate_output_row(
                             line, valid_domains, chapter_title, article_lookup
                         )
@@ -584,16 +470,53 @@ def main():
                         else:
                             invalid_count += 1
                             write_review_entry(review_file_path, chapter_title, article_index + 1, reason, line)
-                    elif reviewer_response.startswith("REVIEW"):
+
+                    elif reviewer_response.startswith("REVIEW") or "| REVIEW |" in reviewer_response:
                         review_lines.append(line)
-                        write_review_entry(review_file_path, chapter_title, article_index + 1, "需人工复核", line)
-                    elif reviewer_response.startswith("FAIL"):
+                        reason = "需人工复核"
+                        if "|" in reviewer_response:
+                            parts = reviewer_response.split("|")
+                            if len(parts) > 5:
+                                reason = parts[-1].strip()
+                        write_review_entry(review_file_path, chapter_title, article_index + 1, reason, line)
+
+                    elif reviewer_response.startswith("FAIL") or "| FAIL |" in reviewer_response:
                         invalid_count += 1
-                        write_review_entry(review_file_path, chapter_title, article_index + 1, "评审不通过", line)
+                        reason = "评审不通过"
+                        if "|" in reviewer_response:
+                            parts = reviewer_response.split("|")
+                            if len(parts) > 5:
+                                reason = parts[-1].strip()
+                        write_review_entry(review_file_path, chapter_title, article_index + 1, reason, line)
+
                     else:
-                        # If reviewer returns unexpected response, treat as FAIL
-                        invalid_count += 1
-                        write_review_entry(review_file_path, chapter_title, article_index + 1, f"评审返回未知标签: {reviewer_response}", line)
+                        # Fallback: check if response contains pass/fail/review keywords
+                        response_lower = reviewer_response.lower()
+                        if any(keyword in response_lower for keyword in ["pass", "通过", "保留"]):
+                            is_valid, reason, normalized_line = validate_output_row(
+                                line, valid_domains, chapter_title, article_lookup
+                            )
+                            if is_valid:
+                                valid_lines.append(normalized_line)
+                            else:
+                                invalid_count += 1
+                                write_review_entry(review_file_path, chapter_title, article_index + 1, reason, line)
+                        elif any(keyword in response_lower for keyword in ["review", "复核", "review"]):
+                            review_lines.append(line)
+                            write_review_entry(review_file_path, chapter_title, article_index + 1, "需人工复核", line)
+                        elif any(keyword in response_lower for keyword in ["fail", "丢弃", "不通过"]):
+                            invalid_count += 1
+                            write_review_entry(review_file_path, chapter_title, article_index + 1, "评审不通过", line)
+                        else:
+                            # Final fallback to original validation
+                            is_valid, reason, normalized_line = validate_output_row(
+                                line, valid_domains, chapter_title, article_lookup
+                            )
+                            if is_valid:
+                                valid_lines.append(normalized_line)
+                            else:
+                                invalid_count += 1
+                                write_review_entry(review_file_path, chapter_title, article_index + 1, reason, line)
 
                 except Exception as e:
                     print(f"         ⚠️ 评审阶段失败: {e}")
@@ -620,7 +543,6 @@ def main():
 
     print(f"\n🎉 完成！请查看: {output_file_path}")
     print(f"🧾 复核清单: {review_file_path}")
-    backend.cleanup()
 
 
 if __name__ == "__main__":
