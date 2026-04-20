@@ -1,9 +1,14 @@
 import os
 import re
+import logging
 import unicodedata
 from pathlib import Path
 from openai import OpenAI
 from pdf_parser import PDFParser, select_pdf_file
+
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
 
 # ================= 测试模式配置 =================
 TEST_MODE = False  # 设置为True时只处理前2章
@@ -38,17 +43,28 @@ def get_env_value(*names):
 DEEPSEEK_API_KEY = get_env_value("DEEPSEEK_API_KEY")
 QWEN_API_KEY = get_env_value("DASHSCOPE_API_KEY")
 
-EVIDENCE_KEYWORDS = (
-    "截图", "报表", "记录", "日志", "台账", "配置", "工单", "审批", "清单",
-    "文件", "证据", "报告", "任命书", "纪要", "演练", "告警", "策略",
-    "文档", "证书", "合同", "备份", "监控", "审计", "检查", "测试",
-    "凭证", "授权", "备案", "登记", "统计", "分析", "评估", "验证"
+AUDITED_ORGANIZATION_NAME = "ABB"
+AUDITED_ORGANIZATION_PROFILE = (
+    "ABB 是工业技术与制造企业，当前合规矩阵面向 ABB 在中国运营的组织、系统、"
+    "产品和服务场景。默认适用主体包括一般网络运营者、网络产品和服务提供者、"
+    "数据处理者、个人信息处理者以及任何个人和组织。ABB 不默认视为关键信息基础设施运营者，"
+    "但 ABB 的客户可能是关键信息基础设施运营者；当条文涉及网络产品/服务提供、采购、外包、"
+    "技术支持、供应链或受托运维等场景时，应评估 ABB 作为 CII 客户供应商或服务提供方需要承接的合规要求。"
 )
 
 TARGET_ENTITY_KEYWORDS = (
-    "网络运营者", "关键信息基础设施的运营者", "关键信息基础设施运营者",
-    "运营者", "网络产品、服务的提供者", "网络产品和服务的提供者",
-    "电子信息发送服务提供者", "应用软件下载服务提供者", "任何个人和组织"
+    "网络运营者", "网络产品、服务的提供者", "网络产品和服务的提供者",
+    "网络服务提供者", "数据处理者", "重要数据的处理者",
+    "个人信息处理者", "电子信息发送服务提供者", "应用软件下载服务提供者",
+    "任何个人和组织"
+)
+
+ENTERPRISE_APPLICABILITY_KEYWORDS = (
+    "建设、运营网络", "通过网络提供服务", "网络产品、服务",
+    "网络产品和服务", "网络关键设备", "网络安全专用产品",
+    "销售或者提供", "方可销售", "用户信息", "个人信息",
+    "网络接入", "域名注册", "入网手续", "信息发布", "即时通讯",
+    "技术支持", "广告推广", "支付结算"
 )
 
 NON_ENTERPRISE_SUBJECT_KEYWORDS = (
@@ -56,13 +72,29 @@ NON_ENTERPRISE_SUBJECT_KEYWORDS = (
     "国家安全机关", "行业组织", "大众传播媒介", "国家网信部门"
 )
 
-OBLIGATION_KEYWORDS = (
-    "应当", "必须", "不得"
+CII_CONTEXT_KEYWORDS = (
+    "关键信息基础设施的运营者", "关键信息基础设施运营者"
 )
 
 ARTICLE_REF_PATTERN = re.compile(r"第[一二三四五六七八九十百零〇两0-9]{1,10}条")
 SKIP_CHAPTER_KEYWORDS = ("法律责任", "附 则", "附则")
+NO_APPLICABLE_MARKERS = (
+    "空响应", "空白", "无适用控制点", "无适用", "不适用",
+    "不涉及", "无需输出", "不输出任何表格行", "返回空白",
+)
 # ===========================================
+
+
+def normalize_for_keyword_match(text):
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", text))
+
+
+def should_skip_chapter(chapter_title):
+    normalized_title = normalize_for_keyword_match(chapter_title)
+    return any(
+        normalize_for_keyword_match(keyword) in normalized_title
+        for keyword in SKIP_CHAPTER_KEYWORDS
+    )
 
 
 # ================= 后端适配层 =================
@@ -271,7 +303,7 @@ def load_auditor_skill():
     if not valid_domains:
         raise ValueError("未能从 domain_standards.md 提取控制域")
 
-    return skill_content, set(valid_domains)
+    return f"{skill_content}\n\n---\n\n{ref_content}", set(valid_domains)
 
 
 def load_analyst_skill():
@@ -281,7 +313,9 @@ def load_analyst_skill():
 
 def load_reviewer_skill():
     """Load reviewer skill content"""
-    return read_skill_file("reviewer/SKILL.md")
+    skill_content = read_skill_file("reviewer/SKILL.md")
+    ref_content = read_skill_file("shared/references/domain_standards.md")
+    return f"{skill_content}\n\n---\n\n{ref_content}"
 
 
 
@@ -289,13 +323,31 @@ def load_reviewer_skill():
 
 def extract_article_excerpt(article_text, article_ref, max_len=64):
     normalized = unicodedata.normalize("NFKC", article_text).replace("\n", "")
-    body = re.sub(rf"^{re.escape(article_ref)}", "", normalized, count=1).strip()
+    ref_index = normalized.find(article_ref)
+    body_source = normalized[ref_index:] if ref_index >= 0 else normalized
+    body = re.sub(rf"^{re.escape(article_ref)}", "", body_source, count=1).strip()
     return f"【{article_ref}】{body[:max_len].rstrip() + '...' if len(body) > max_len else body}"
 
 
-def extract_article_refs(text):
+def extract_article_ref_list(text):
     normalized_text = unicodedata.normalize("NFKC", text)
-    return set(ARTICLE_REF_PATTERN.findall(normalized_text))
+    return ARTICLE_REF_PATTERN.findall(normalized_text)
+
+
+def extract_article_refs(text):
+    return set(extract_article_ref_list(text))
+
+
+def extract_primary_article_ref(article_text):
+    normalized_text = unicodedata.normalize("NFKC", article_text)
+    for line in normalized_text.splitlines():
+        stripped = line.strip()
+        match = ARTICLE_REF_PATTERN.match(stripped)
+        if match:
+            return match.group(0)
+
+    refs = extract_article_ref_list(normalized_text)
+    return refs[0] if refs else ""
 
 
 
@@ -330,7 +382,7 @@ def build_chapter_overview(chapter_info, current_index=None, window_size=None):
 
 
 def build_analysis_messages(backend, law_name, chapter_title, chapter_summary, article_text, system_prompt, chapter_analysis=""):
-    article_ref = next(iter(extract_article_refs(article_text)), "未识别条款")
+    article_ref = extract_primary_article_ref(article_text) or "未识别条款"
 
     # Incorporate analyst summary if available
     analysis_context = ""
@@ -338,6 +390,12 @@ def build_analysis_messages(backend, law_name, chapter_title, chapter_summary, a
         analysis_context = f"\n本章合规画像（分析师摘要）：\n{chapter_analysis}\n"
 
     user_prompt = f"""你正在分析 **《{law_name}》** 的 **【{chapter_title}】**。
+
+当前被审计组织：
+{AUDITED_ORGANIZATION_NAME}
+
+组织适用性画像：
+{AUDITED_ORGANIZATION_PROFILE}
 
 请先理解本章整体内容，再分析当前条文。
 
@@ -363,30 +421,43 @@ def build_analysis_messages_with_context(backend, law_name, chapter_title, chapt
 
 
 def split_markdown_row(line):
-    cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-    return cells if len(cells) == 5 and line.strip().startswith("|") and line.strip().endswith("|") else None
+    stripped = line.strip()
+    if "|" not in stripped:
+        return None
+    cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+    if len(cells) != 5 or any(not cell for cell in cells):
+        return None
+    return cells
 
 
 def build_article_map(articles):
     return {
-        next(iter(sorted(extract_article_refs(article)))): article
+        extract_primary_article_ref(article): article
         for article in articles
-        if extract_article_refs(article)
+        if extract_primary_article_ref(article)
     }
 
 
 def is_actionable_article(article_text, chapter_title):
-    if any(keyword in chapter_title for keyword in SKIP_CHAPTER_KEYWORDS):
+    if should_skip_chapter(chapter_title):
         return False
 
     normalized = unicodedata.normalize("NFKC", article_text)
-    return (
-        any(keyword in normalized for keyword in OBLIGATION_KEYWORDS)
-        and (
-            any(keyword in normalized for keyword in TARGET_ENTITY_KEYWORDS)
-            or not any(keyword in normalized for keyword in NON_ENTERPRISE_SUBJECT_KEYWORDS)
-        )
-    )
+    has_target_entity = any(keyword in normalized for keyword in TARGET_ENTITY_KEYWORDS)
+    has_enterprise_applicability = any(keyword in normalized for keyword in ENTERPRISE_APPLICABILITY_KEYWORDS)
+    has_cii_context = any(keyword in normalized for keyword in CII_CONTEXT_KEYWORDS)
+    has_non_enterprise_subject = any(keyword in normalized for keyword in NON_ENTERPRISE_SUBJECT_KEYWORDS)
+
+    if has_target_entity:
+        return True
+    if has_enterprise_applicability:
+        return True
+    if has_cii_context:
+        return True
+    if has_non_enterprise_subject:
+        return False
+
+    return True
 
 
 def validate_output_row(line, valid_domains, chapter_title, article_map):
@@ -410,8 +481,6 @@ def validate_output_row(line, valid_domains, chapter_title, article_map):
         return False, f"当前批次不存在引用条款: {cited_ref}", None
     if not is_actionable_article(source_article, chapter_title):
         return False, "引用条款不属于适合转控制点的企业义务", None
-    if not any(keyword in control_point for keyword in EVIDENCE_KEYWORDS):
-        return False, "控制点缺少明确审计证据", None
 
     normalized_line = "| " + " | ".join([
         domain,
@@ -441,11 +510,20 @@ def extract_valid_table_lines(response_text):
             continue
         if "---" in line or "涉及领域" in line or "控制目标" in line or "法律要求" in line:
             continue
+        if is_no_applicable_response(line):
+            continue
         # 使用 split_markdown_row 验证是否为有效的5列表格行
         cells = split_markdown_row(line)
         if cells is not None:
             valid_lines.append(line)
     return valid_lines
+
+
+def is_no_applicable_response(response_text):
+    normalized = normalize_for_keyword_match(response_text)
+    if not normalized:
+        return True
+    return any(marker in normalized for marker in NO_APPLICABLE_MARKERS)
 
 
 def main():
@@ -499,7 +577,7 @@ def main():
             print(f"\n⏭️ 跳过章节: {chapter_title}")
             continue
 
-        if any(keyword in chapter_title for keyword in SKIP_CHAPTER_KEYWORDS):
+        if should_skip_chapter(chapter_title):
             print(f"\n⏭️ 跳过章节: {chapter_title} (默认不从处罚/附则章节抽取)")
             continue
 
@@ -511,7 +589,13 @@ def main():
         print(f"      📋 分析师阶段: 生成章节摘要...")
         analyst_messages = backend.build_messages(
             analyst_system_prompt,
-            f"请分析 **《{law_name}》** 的 **【{chapter_title}】**。"
+            f"""请分析 **《{law_name}》** 的 **【{chapter_title}】**。
+
+当前被审计组织：
+{AUDITED_ORGANIZATION_NAME}
+
+组织适用性画像：
+{AUDITED_ORGANIZATION_PROFILE}"""
         )
         try:
             chapter_analysis = backend.generate(analyst_messages, max_tokens=300, task="chapter_analysis")
@@ -521,7 +605,13 @@ def main():
             chapter_analysis = ""
 
         for article_index, article_text in enumerate(articles):
-            article_ref = next(iter(extract_article_refs(article_text)), f"第{article_index + 1}条(未识别)")
+            article_meta = chapter_info.get("article_meta", [])
+            article_ref = (
+                article_meta[article_index].get("article_ref")
+                if article_index < len(article_meta)
+                else ""
+            )
+            article_ref = article_ref or extract_primary_article_ref(article_text) or f"第{article_index + 1}条(未识别)"
 
             if not is_actionable_article(article_text, chapter_title):
                 print(f"      -> 跳过条文 {article_ref}: 不属于企业义务")
@@ -552,8 +642,23 @@ def main():
             valid_lines = []
             review_lines = []
             invalid_count = 0
+            candidate_lines = extract_valid_table_lines(response_text)
 
-            for line in extract_valid_table_lines(response_text):
+            if not candidate_lines:
+                raw_response = response_text.strip() or "<空响应>"
+                if is_no_applicable_response(raw_response):
+                    print("         ⏭️ Auditor 判断无适用控制点")
+                else:
+                    write_review_entry(
+                        review_file_path,
+                        chapter_title,
+                        article_index + 1,
+                        "Auditor 未返回可解析的 5 列 Markdown 表格行",
+                        raw_response,
+                    )
+                    print("         ⚠️ Auditor 未返回可解析表格行，原始输出已写入复核清单")
+
+            for line in candidate_lines:
                 # Step 3: Reviewer phase - quality check
                 reviewer_messages = backend.build_messages(
                     reviewer_system_prompt,
@@ -567,6 +672,8 @@ def main():
 
 章节标题：{chapter_title}
 法律名称：{law_name}
+当前被审计组织：{AUDITED_ORGANIZATION_NAME}
+组织适用性画像：{AUDITED_ORGANIZATION_PROFILE}
 
 请基于评审员技能中的标准进行严格审查。请只输出以下三个标签之一：PASS、REVIEW 或 FAIL，不要输出任何其他内容。"""
                 )
@@ -612,7 +719,7 @@ def main():
                 print(f"         ✅ 通过评审 {len(valid_lines)} 个控制点")
             if review_lines:
                 print(f"         ⚠️ {len(review_lines)} 个控制点需人工复核")
-            if not valid_lines and not review_lines:
+            if candidate_lines and not valid_lines and not review_lines:
                 print("         ℹ️ 未产出通过评审的控制点")
 
             if invalid_count:
