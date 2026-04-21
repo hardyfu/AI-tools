@@ -1,8 +1,9 @@
+import logging
 import os
 import re
-import logging
 import unicodedata
 from pathlib import Path
+
 from openai import OpenAI
 from pdf_parser import PDFParser, select_pdf_file
 
@@ -26,7 +27,9 @@ QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 QWEN_MODEL_NAME = "qwen3.6-plus"
 
 # 后端选择配置
-DEFAULT_BACKEND = os.getenv("LLM_BACKEND", "deepseek").lower()  # 可选: "deepseek" 或 "qwen"
+DEFAULT_BACKEND = os.getenv(
+    "LLM_BACKEND", "deepseek"
+).lower()  # 可选: "deepseek" 或 "qwen"
 
 BASE_DIR = Path(__file__).resolve().parent
 SKILLS_DIR = BASE_DIR / "skills"
@@ -53,34 +56,66 @@ AUDITED_ORGANIZATION_PROFILE = (
 )
 
 TARGET_ENTITY_KEYWORDS = (
-    "网络运营者", "网络产品、服务的提供者", "网络产品和服务的提供者",
-    "网络服务提供者", "数据处理者", "重要数据的处理者",
-    "个人信息处理者", "电子信息发送服务提供者", "应用软件下载服务提供者",
-    "任何个人和组织"
+    "网络运营者",
+    "网络产品、服务的提供者",
+    "网络产品和服务的提供者",
+    "网络服务提供者",
+    "数据处理者",
+    "重要数据的处理者",
+    "个人信息处理者",
+    "电子信息发送服务提供者",
+    "应用软件下载服务提供者",
+    "任何个人和组织",
 )
 
 ENTERPRISE_APPLICABILITY_KEYWORDS = (
-    "建设、运营网络", "通过网络提供服务", "网络产品、服务",
-    "网络产品和服务", "网络关键设备", "网络安全专用产品",
-    "销售或者提供", "方可销售", "用户信息", "个人信息",
-    "网络接入", "域名注册", "入网手续", "信息发布", "即时通讯",
-    "技术支持", "广告推广", "支付结算"
+    "建设、运营网络",
+    "通过网络提供服务",
+    "网络产品、服务",
+    "网络产品和服务",
+    "网络关键设备",
+    "网络安全专用产品",
+    "销售或者提供",
+    "方可销售",
+    "用户信息",
+    "个人信息",
+    "网络接入",
+    "域名注册",
+    "入网手续",
+    "信息发布",
+    "即时通讯",
+    "技术支持",
+    "广告推广",
+    "支付结算",
 )
 
 NON_ENTERPRISE_SUBJECT_KEYWORDS = (
-    "国家", "国务院", "人民政府", "网信部门", "有关部门", "公安机关",
-    "国家安全机关", "行业组织", "大众传播媒介", "国家网信部门"
+    "国家",
+    "国务院",
+    "人民政府",
+    "网信部门",
+    "有关部门",
+    "公安机关",
+    "国家安全机关",
+    "行业组织",
+    "大众传播媒介",
+    "国家网信部门",
 )
 
-CII_CONTEXT_KEYWORDS = (
-    "关键信息基础设施的运营者", "关键信息基础设施运营者"
-)
+CII_CONTEXT_KEYWORDS = ("关键信息基础设施的运营者", "关键信息基础设施运营者")
 
 ARTICLE_REF_PATTERN = re.compile(r"第[一二三四五六七八九十百零〇两0-9]{1,10}条")
 SKIP_CHAPTER_KEYWORDS = ("法律责任", "附 则", "附则")
 NO_APPLICABLE_MARKERS = (
-    "空响应", "空白", "无适用控制点", "无适用", "不适用",
-    "不涉及", "无需输出", "不输出任何表格行", "返回空白",
+    "空响应",
+    "空白",
+    "无适用控制点",
+    "无适用",
+    "不适用",
+    "不涉及",
+    "无需输出",
+    "不输出任何表格行",
+    "返回空白",
 )
 # ===========================================
 
@@ -124,10 +159,21 @@ class QwenBackend(BaseLLMBackend):
         self.client: OpenAI | None = None
 
     def initialize(self):
-        print(f"\n🚀 正在连接 Qwen API: {self.base_url} / {self.model_name} ...")
+        print(f"\n🚀 正在连接 Qwen API: {self.base_url} / 模型:{self.model_name} ...")
+
+        # 配置 SSL 验证
+        http_client_kwargs = {}
+        if not SSL_VERIFY:
+            print("⚠️  SSL 验证已禁用（仅限测试环境使用）")
+            http_client_kwargs["verify"] = False
+        elif SSL_CERT_PATH:
+            print(f"📄 使用自定义 SSL 证书: {SSL_CERT_PATH}")
+            http_client_kwargs["verify"] = SSL_CERT_PATH
+
         self.client = OpenAI(
             base_url=self.base_url,
-            api_key=self.api_key
+            api_key=self.api_key,
+            http_client_kwargs=http_client_kwargs,
         )
         print("✅ Qwen 客户端初始化完成")
 
@@ -173,7 +219,13 @@ class QwenBackend(BaseLLMBackend):
 class DeepSeekBackend(BaseLLMBackend):
     name = "deepseek"
 
-    def __init__(self, base_url: str, api_key: str, chat_model_name: str, reasoner_model_name: str):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        chat_model_name: str,
+        reasoner_model_name: str,
+    ):
         self.base_url = base_url
         self.api_key = api_key
         self.chat_model_name = chat_model_name
@@ -185,9 +237,20 @@ class DeepSeekBackend(BaseLLMBackend):
             f"\n🚀 正在连接 DeepSeek API: {self.base_url} "
             f"/ 摘要:{self.chat_model_name} 控制点:{self.reasoner_model_name} ..."
         )
+
+        # 配置 SSL 验证
+        http_client_kwargs = {}
+        if not SSL_VERIFY:
+            print("⚠️  SSL 验证已禁用（仅限测试环境使用）")
+            http_client_kwargs["verify"] = False
+        elif SSL_CERT_PATH:
+            print(f"📄 使用自定义 SSL 证书: {SSL_CERT_PATH}")
+            http_client_kwargs["verify"] = SSL_CERT_PATH
+
         self.client = OpenAI(
             base_url=self.base_url,
-            api_key=self.api_key
+            api_key=self.api_key,
+            http_client_kwargs=http_client_kwargs,
         )
         print("✅ DeepSeek 客户端初始化完成")
 
@@ -209,9 +272,7 @@ class DeepSeekBackend(BaseLLMBackend):
         model_name = self.model_for_task(task)
         try:
             response = self.client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                max_tokens=max_tokens
+                model=model_name, messages=messages, max_tokens=max_tokens
             )
 
             content = response.choices[0].message.content
@@ -226,9 +287,13 @@ class DeepSeekBackend(BaseLLMBackend):
 
 
 def prompt_backend_choice():
-    default_choice = DEFAULT_BACKEND if DEFAULT_BACKEND in {"deepseek", "qwen"} else "deepseek"
+    default_choice = (
+        DEFAULT_BACKEND if DEFAULT_BACKEND in {"deepseek", "qwen"} else "deepseek"
+    )
     print("\n请选择本次运行使用的模型后端：")
-    print("  1. DeepSeek（章节摘要/评审: deepseek-chat；控制点生成: deepseek-reasoner）")
+    print(
+        "  1. DeepSeek（章节摘要/评审: deepseek-chat；控制点生成: deepseek-reasoner）"
+    )
     print("  2. Qwen（始终 qwen3.6-plus；仅控制点生成启用 thinking）")
     choice = input(f"请输入 1 或 2，直接回车默认 {default_choice}: ").strip().lower()
 
@@ -249,7 +314,9 @@ def select_backend():
     if backend_choice == "deepseek":
         print("🧠 配置使用 DeepSeek 后端")
         if not DEEPSEEK_API_KEY:
-            raise ValueError("DeepSeek API Key 未设置，请设置 DEEPSEEK_API_KEY 环境变量")
+            raise ValueError(
+                "DeepSeek API Key 未设置，请设置 DEEPSEEK_API_KEY 环境变量"
+            )
         return DeepSeekBackend(
             DEEPSEEK_BASE_URL,
             DEEPSEEK_API_KEY,
@@ -262,7 +329,9 @@ def select_backend():
             raise ValueError("Qwen API Key 未设置，请设置 DASHSCOPE_API_KEY 环境变量")
         return QwenBackend(QWEN_BASE_URL, QWEN_API_KEY, QWEN_MODEL_NAME)
     else:
-        raise ValueError(f"未知的后端配置: {backend_choice}，请设置为 'deepseek' 或 'qwen'")
+        raise ValueError(
+            f"未知的后端配置: {backend_choice}，请设置为 'deepseek' 或 'qwen'"
+        )
 
 
 # ===========================================
@@ -318,9 +387,6 @@ def load_reviewer_skill():
     return f"{skill_content}\n\n---\n\n{ref_content}"
 
 
-
-
-
 def extract_article_excerpt(article_text, article_ref, max_len=64):
     normalized = unicodedata.normalize("NFKC", article_text).replace("\n", "")
     ref_index = normalized.find(article_ref)
@@ -350,38 +416,64 @@ def extract_primary_article_ref(article_text):
     return refs[0] if refs else ""
 
 
-
-
-
 def build_chapter_overview(chapter_info, current_index=None, window_size=None):
     article_meta = chapter_info.get("article_meta", [])
     articles = chapter_info["articles"]
     is_windowed_view = current_index is not None
     start_index = max(0, current_index - (window_size or 2)) if is_windowed_view else 0
-    end_index = min(len(articles), current_index + (window_size or 2) + 1) if is_windowed_view else len(articles)
+    end_index = (
+        min(len(articles), current_index + (window_size or 2) + 1)
+        if is_windowed_view
+        else len(articles)
+    )
 
     overview_lines = []
     for idx in range(start_index, end_index):
         article = articles[idx]
         meta = article_meta[idx] if idx < len(article_meta) else {}
-        article_ref = meta.get("article_ref") or next(iter(extract_article_refs(article)), "")
+        article_ref = meta.get("article_ref") or next(
+            iter(extract_article_refs(article)), ""
+        )
         subject_type = meta.get("subject_type", "unknown")
         paragraph_count = meta.get("paragraph_count", 1)
         excerpt_limit = 48 if is_windowed_view else 80
-        prefix = f"- [{'当前条文' if idx == current_index else '邻近条文'}] " if is_windowed_view else "- "
-        suffix = f" [主体={subject_type}]" if is_windowed_view else f" [主体={subject_type}; 段落={paragraph_count}]"
+        prefix = (
+            f"- [{'当前条文' if idx == current_index else '邻近条文'}] "
+            if is_windowed_view
+            else "- "
+        )
+        suffix = (
+            f" [主体={subject_type}]"
+            if is_windowed_view
+            else f" [主体={subject_type}; 段落={paragraph_count}]"
+        )
 
         if article_ref:
-            excerpt = extract_article_excerpt(article, article_ref, max_len=excerpt_limit)
+            excerpt = extract_article_excerpt(
+                article, article_ref, max_len=excerpt_limit
+            )
         else:
-            excerpt = unicodedata.normalize("NFKC", article).replace("\n", "")[:excerpt_limit].rstrip() + "..."
+            excerpt = (
+                unicodedata.normalize("NFKC", article)
+                .replace("\n", "")[:excerpt_limit]
+                .rstrip()
+                + "..."
+            )
 
         overview_lines.append(f"{prefix}{excerpt}{suffix}")
 
     return "\n".join(overview_lines)
 
 
-def build_analysis_messages(backend, law_name, chapter_title, chapter_summary, article_text, system_prompt, chapter_analysis=""):
+def build_analysis_messages(
+    backend,
+    law_name,
+    chapter_title,
+    chapter_summary,
+    article_text,
+    system_prompt,
+    chapter_analysis="",
+):
     article_ref = extract_primary_article_ref(article_text) or "未识别条款"
 
     # Incorporate analyst summary if available
@@ -414,9 +506,28 @@ def build_analysis_messages(backend, law_name, chapter_title, chapter_summary, a
     return backend.build_messages(system_prompt, user_prompt)
 
 
-def build_analysis_messages_with_context(backend, law_name, chapter_title, chapter_info, article_index, article_text, system_prompt, chapter_analysis=""):
-    chapter_summary = build_chapter_overview(chapter_info, current_index=article_index, window_size=2)
-    messages = build_analysis_messages(backend, law_name, chapter_title, chapter_summary, article_text, system_prompt, chapter_analysis)
+def build_analysis_messages_with_context(
+    backend,
+    law_name,
+    chapter_title,
+    chapter_info,
+    article_index,
+    article_text,
+    system_prompt,
+    chapter_analysis="",
+):
+    chapter_summary = build_chapter_overview(
+        chapter_info, current_index=article_index, window_size=2
+    )
+    messages = build_analysis_messages(
+        backend,
+        law_name,
+        chapter_title,
+        chapter_summary,
+        article_text,
+        system_prompt,
+        chapter_analysis,
+    )
     return messages, len(chapter_summary), 1
 
 
@@ -444,9 +555,13 @@ def is_actionable_article(article_text, chapter_title):
 
     normalized = unicodedata.normalize("NFKC", article_text)
     has_target_entity = any(keyword in normalized for keyword in TARGET_ENTITY_KEYWORDS)
-    has_enterprise_applicability = any(keyword in normalized for keyword in ENTERPRISE_APPLICABILITY_KEYWORDS)
+    has_enterprise_applicability = any(
+        keyword in normalized for keyword in ENTERPRISE_APPLICABILITY_KEYWORDS
+    )
     has_cii_context = any(keyword in normalized for keyword in CII_CONTEXT_KEYWORDS)
-    has_non_enterprise_subject = any(keyword in normalized for keyword in NON_ENTERPRISE_SUBJECT_KEYWORDS)
+    has_non_enterprise_subject = any(
+        keyword in normalized for keyword in NON_ENTERPRISE_SUBJECT_KEYWORDS
+    )
 
     if has_target_entity:
         return True
@@ -482,19 +597,27 @@ def validate_output_row(line, valid_domains, chapter_title, article_map):
     if not is_actionable_article(source_article, chapter_title):
         return False, "引用条款不属于适合转控制点的企业义务", None
 
-    normalized_line = "| " + " | ".join([
-        domain,
-        control_target,
-        extract_article_excerpt(source_article, cited_ref),
-        control_point,
-        row_type
-    ]) + " |"
+    normalized_line = (
+        "| "
+        + " | ".join(
+            [
+                domain,
+                control_target,
+                extract_article_excerpt(source_article, cited_ref),
+                control_point,
+                row_type,
+            ]
+        )
+        + " |"
+    )
     return True, "", normalized_line
 
 
 def write_review_entry(file_path, chapter_title, batch_index, reason, line):
     with open(file_path, "a", encoding="utf-8") as f:
-        f.write(f"## 章节: {chapter_title} / 批次: {batch_index}\n- 原因: {reason}\n- 原文: {line}\n\n")
+        f.write(
+            f"## 章节: {chapter_title} / 批次: {batch_index}\n- 原因: {reason}\n- 原文: {line}\n\n"
+        )
 
 
 def append_to_file(file_path, text):
@@ -508,7 +631,12 @@ def extract_valid_table_lines(response_text):
         line = raw_line.strip()
         if not line:
             continue
-        if "---" in line or "涉及领域" in line or "控制目标" in line or "法律要求" in line:
+        if (
+            "---" in line
+            or "涉及领域" in line
+            or "控制目标" in line
+            or "法律要求" in line
+        ):
             continue
         if is_no_applicable_response(line):
             continue
@@ -595,10 +723,12 @@ def main():
 {AUDITED_ORGANIZATION_NAME}
 
 组织适用性画像：
-{AUDITED_ORGANIZATION_PROFILE}"""
+{AUDITED_ORGANIZATION_PROFILE}""",
         )
         try:
-            chapter_analysis = backend.generate(analyst_messages, max_tokens=300, task="chapter_analysis")
+            chapter_analysis = backend.generate(
+                analyst_messages, max_tokens=300, task="chapter_analysis"
+            )
             print(f"      ✅ 章节摘要生成完成 ({len(chapter_analysis)} 字符)")
         except Exception as e:
             print(f"      ❌ 分析师阶段失败: {e}")
@@ -611,14 +741,25 @@ def main():
                 if article_index < len(article_meta)
                 else ""
             )
-            article_ref = article_ref or extract_primary_article_ref(article_text) or f"第{article_index + 1}条(未识别)"
+            article_ref = (
+                article_ref
+                or extract_primary_article_ref(article_text)
+                or f"第{article_index + 1}条(未识别)"
+            )
 
             if not is_actionable_article(article_text, chapter_title):
                 print(f"      -> 跳过条文 {article_ref}: 不属于企业义务")
                 continue
 
             messages, prompt_size, prompt_level = build_analysis_messages_with_context(
-                backend, law_name, chapter_title, chapter_info, article_index, article_text, auditor_system_prompt, chapter_analysis
+                backend,
+                law_name,
+                chapter_title,
+                chapter_info,
+                article_index,
+                article_text,
+                auditor_system_prompt,
+                chapter_analysis,
             )
 
             print(
@@ -627,7 +768,9 @@ def main():
             )
 
             try:
-                response_text = backend.generate(messages, max_tokens=2500, task="control_generation")
+                response_text = backend.generate(
+                    messages, max_tokens=2500, task="control_generation"
+                )
             except Exception as error:
                 print(f"         ❌ 模型调用失败: {error}")
                 write_review_entry(
@@ -635,7 +778,7 @@ def main():
                     chapter_title,
                     article_index + 1,
                     f"模型调用失败: {error}",
-                    article_ref
+                    article_ref,
                 )
                 continue
 
@@ -656,7 +799,9 @@ def main():
                         "Auditor 未返回可解析的 5 列 Markdown 表格行",
                         raw_response,
                     )
-                    print("         ⚠️ Auditor 未返回可解析表格行，原始输出已写入复核清单")
+                    print(
+                        "         ⚠️ Auditor 未返回可解析表格行，原始输出已写入复核清单"
+                    )
 
             for line in candidate_lines:
                 # Step 3: Reviewer phase - quality check
@@ -675,10 +820,12 @@ def main():
 当前被审计组织：{AUDITED_ORGANIZATION_NAME}
 组织适用性画像：{AUDITED_ORGANIZATION_PROFILE}
 
-请基于评审员技能中的标准进行严格审查。请只输出以下三个标签之一：PASS、REVIEW 或 FAIL，不要输出任何其他内容。"""
+请基于评审员技能中的标准进行严格审查。请只输出以下三个标签之一：PASS、REVIEW 或 FAIL，不要输出任何其他内容。""",
                 )
                 try:
-                    reviewer_response = backend.generate(reviewer_messages, max_tokens=50, task="review")
+                    reviewer_response = backend.generate(
+                        reviewer_messages, max_tokens=50, task="review"
+                    )
                     reviewer_response = reviewer_response.strip().upper()
 
                     # Simplified parsing - only check for PASS, REVIEW, or FAIL
@@ -690,17 +837,41 @@ def main():
                             valid_lines.append(normalized_line)
                         else:
                             invalid_count += 1
-                            write_review_entry(review_file_path, chapter_title, article_index + 1, reason, line)
+                            write_review_entry(
+                                review_file_path,
+                                chapter_title,
+                                article_index + 1,
+                                reason,
+                                line,
+                            )
                     elif reviewer_response.startswith("REVIEW"):
                         review_lines.append(line)
-                        write_review_entry(review_file_path, chapter_title, article_index + 1, "需人工复核", line)
+                        write_review_entry(
+                            review_file_path,
+                            chapter_title,
+                            article_index + 1,
+                            "需人工复核",
+                            line,
+                        )
                     elif reviewer_response.startswith("FAIL"):
                         invalid_count += 1
-                        write_review_entry(review_file_path, chapter_title, article_index + 1, "评审不通过", line)
+                        write_review_entry(
+                            review_file_path,
+                            chapter_title,
+                            article_index + 1,
+                            "评审不通过",
+                            line,
+                        )
                     else:
                         # If reviewer returns unexpected response, treat as FAIL
                         invalid_count += 1
-                        write_review_entry(review_file_path, chapter_title, article_index + 1, f"评审返回未知标签: {reviewer_response}", line)
+                        write_review_entry(
+                            review_file_path,
+                            chapter_title,
+                            article_index + 1,
+                            f"评审返回未知标签: {reviewer_response}",
+                            line,
+                        )
 
                 except Exception as e:
                     print(f"         ⚠️ 评审阶段失败: {e}")
@@ -712,7 +883,13 @@ def main():
                         valid_lines.append(normalized_line)
                     else:
                         invalid_count += 1
-                        write_review_entry(review_file_path, chapter_title, article_index + 1, reason, line)
+                        write_review_entry(
+                            review_file_path,
+                            chapter_title,
+                            article_index + 1,
+                            reason,
+                            line,
+                        )
 
             if valid_lines:
                 append_to_file(output_file_path, "\n".join(valid_lines))
