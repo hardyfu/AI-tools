@@ -8,8 +8,7 @@ from datetime import datetime
 
 # Ollama API 的默认本地地址
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
-VISION_MODEL_NAME = "qwen3-vl:4b"
-JUDGE_MODEL_NAME = "qwen3:8b"
+JUDGE_MODEL_NAME = "qwen3.5:4b"
 
 
 def encode_image_to_base64(image_path):
@@ -48,7 +47,7 @@ def normalize_to_text(value):
 
 def extract_config_with_vision_model(image_path):
     """第 1 步：使用 qwen3-vl:8b 提取截图中的关键配置文本"""
-    print(f"[*] Step 1/2: 使用 {VISION_MODEL_NAME} 识别截图内容...")
+    print(f"[*] Step 1/2: 使用 {JUDGE_MODEL_NAME} 识别截图内容...")
     base64_image = encode_image_to_base64(image_path)
 
     system_prompt = (
@@ -60,7 +59,7 @@ def extract_config_with_vision_model(image_path):
     user_prompt = "请提取这张截图中可用于合规审计的配置文本。"
 
     payload = {
-        "model": VISION_MODEL_NAME,
+        "model": JUDGE_MODEL_NAME,
         "messages": [
             {"role": "system", "content": system_prompt},
             {
