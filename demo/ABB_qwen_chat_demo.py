@@ -8,7 +8,6 @@ ABB_QWEN_API_KEY = os.getenv("ABB_QWEN_API_KEY")
 client = openai.OpenAI(
     api_key=ABB_QWEN_API_KEY,
     base_url="https://is-ai.abb.com.cn/v1",
-    http_client=http_client
 )
 
 response = client.chat.completions.create(
