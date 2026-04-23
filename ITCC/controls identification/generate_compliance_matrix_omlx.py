@@ -3,6 +3,7 @@ import re
 import logging
 import unicodedata
 from pathlib import Path
+import httpx
 from openai import OpenAI
 from pdf_parser import PDFParser, select_pdf_file
 
@@ -25,8 +26,13 @@ DEEPSEEK_REASONER_MODEL_NAME = "deepseek-reasoner"
 QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 QWEN_MODEL_NAME = "qwen3.6-plus"
 
+# ABB Qwen API 配置（参考 demo/ABB_qwen_chat_demo.py）
+ABB_QWEN_BASE_URL = "https://is-ai.abb.com.cn/v1"
+ABB_QWEN_MODEL_NAME = "qwen3.5"
+
 # 后端选择配置
-DEFAULT_BACKEND = os.getenv("LLM_BACKEND", "deepseek").lower()  # 可选: "deepseek" 或 "qwen"
+DEFAULT_BACKEND = os.getenv("LLM_BACKEND", "deepseek").lower()  # 可选: "deepseek"、"qwen" 或 "abb_qwen"
+LLM_MAX_TOKENS = 8192
 
 BASE_DIR = Path(__file__).resolve().parent
 SKILLS_DIR = BASE_DIR / "skills"
@@ -42,6 +48,7 @@ def get_env_value(*names):
 
 DEEPSEEK_API_KEY = get_env_value("DEEPSEEK_API_KEY")
 QWEN_API_KEY = get_env_value("DASHSCOPE_API_KEY")
+ABB_QWEN_API_KEY = get_env_value("ABB_QWEN_API_KEY")
 
 AUDITED_ORGANIZATION_NAME = "ABB"
 AUDITED_ORGANIZATION_PROFILE = (
@@ -82,6 +89,7 @@ NO_APPLICABLE_MARKERS = (
     "空响应", "空白", "无适用控制点", "无适用", "不适用",
     "不涉及", "无需输出", "不输出任何表格行", "返回空白",
 )
+FINAL_OUTPUT_MARKERS = ("FINAL_OUTPUT:", "最终输出：", "最终输出:")
 # ===========================================
 
 
@@ -97,6 +105,19 @@ def should_skip_chapter(chapter_title):
     )
 
 
+def extract_final_output_content(content):
+    marker_positions = [
+        (content.rfind(marker), marker)
+        for marker in FINAL_OUTPUT_MARKERS
+        if content.rfind(marker) >= 0
+    ]
+    if not marker_positions:
+        return content
+
+    marker_index, marker = max(marker_positions, key=lambda item: item[0])
+    return content[marker_index + len(marker):].strip()
+
+
 # ================= 后端适配层 =================
 class BaseLLMBackend:
     name = "base"
@@ -107,8 +128,38 @@ class BaseLLMBackend:
     def build_messages(self, system_prompt: str, user_prompt: str):
         raise NotImplementedError
 
-    def generate(self, messages, max_tokens: int = 2500, task: str = "default") -> str:
+    def generate(self, messages, max_tokens: int = LLM_MAX_TOKENS, task: str = "default") -> str:
         raise NotImplementedError
+
+    def normalize_response(self, content: str, task: str) -> str:
+        if task == "review":
+            normalized = content.strip().upper()
+            for label in ("PASS", "REVIEW", "FAIL"):
+                if re.search(rf"\b{label}\b", normalized):
+                    return label
+
+        if task == "control_generation":
+            final_content = extract_final_output_content(content)
+            table_lines = extract_valid_table_lines(final_content)
+            if table_lines:
+                return "\n".join(table_lines)
+
+            if is_no_applicable_response(final_content):
+                return ""
+
+            if any(marker in content for marker in FINAL_OUTPUT_MARKERS):
+                return f"{self.name.upper()}_FINAL_OUTPUT_WITHOUT_PARSEABLE_TABLE_ROWS"
+
+            if re.search(r"Thinking Process:|<think>|思考过程", content, re.IGNORECASE):
+                return f"{self.name.upper()}_THINKING_WITHOUT_PARSEABLE_TABLE_ROWS"
+
+            return f"{self.name.upper()}_NON_TABLE_CONTROL_OUTPUT"
+
+        table_lines = extract_valid_table_lines(content)
+        if table_lines:
+            return "\n".join(table_lines)
+
+        return content.strip()
 
     def cleanup(self):
         pass
@@ -140,7 +191,7 @@ class QwenBackend(BaseLLMBackend):
     def enable_thinking_for_task(self, task: str) -> bool:
         return task == "control_generation"
 
-    def generate(self, messages, max_tokens: int = 2500, task: str = "default") -> str:
+    def generate(self, messages, max_tokens: int = LLM_MAX_TOKENS, task: str = "default") -> str:
         if self.client is None:
             raise RuntimeError("Qwen 客户端尚未初始化，请先调用 initialize()")
 
@@ -162,12 +213,74 @@ class QwenBackend(BaseLLMBackend):
                 content = getattr(delta, "content", None)
                 if content:
                     content_parts.append(content)
-            return "".join(content_parts).strip()
+            return self.normalize_response("".join(content_parts), task)
         except Exception as e:
             print(f"❌ Qwen API 调用失败: {e}")
             if "api_key" in str(e).lower() or "authentication" in str(e).lower():
                 print("⚠️  请检查 DASHSCOPE_API_KEY 是否正确")
             raise
+
+
+class ABBQwenBackend(BaseLLMBackend):
+    name = "abb_qwen"
+
+    def __init__(self, base_url: str, api_key: str, model_name: str):
+        self.base_url = base_url
+        self.api_key = api_key
+        self.model_name = model_name
+        self.http_client: httpx.Client | None = None
+        self.client: OpenAI | None = None
+
+    def initialize(self):
+        print(f"\n🚀 正在连接 ABB Qwen API: {self.base_url} / {self.model_name} ...")
+        self.http_client = httpx.Client(verify=False, follow_redirects=True)
+        self.client = OpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            http_client=self.http_client
+        )
+        print("✅ ABB Qwen 客户端初始化完成")
+
+    def build_messages(self, system_prompt: str, user_prompt: str):
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+    def enable_thinking_for_task(self, task: str) -> bool:
+        return task == "control_generation"
+
+    def generate(self, messages, max_tokens: int = LLM_MAX_TOKENS, task: str = "default") -> str:
+        if self.client is None:
+            raise RuntimeError("ABB Qwen 客户端尚未初始化，请先调用 initialize()")
+
+        enable_thinking = self.enable_thinking_for_task(task)
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                temperature=0.3,
+                top_p=0.95,
+                max_tokens=max_tokens,
+                extra_body={
+                    "chat_template_kwargs": {"enable_thinking": enable_thinking}
+                }
+            )
+
+            content = response.choices[0].message.content
+            if content is None:
+                return ""
+            return self.normalize_response(content, task)
+        except Exception as e:
+            print(f"❌ ABB Qwen API 调用失败: {e}")
+            if "api_key" in str(e).lower() or "authentication" in str(e).lower():
+                print("⚠️  请检查 ABB_QWEN_API_KEY 是否正确")
+            raise
+
+    def cleanup(self):
+        if self.http_client is not None:
+            self.http_client.close()
+            self.http_client = None
 
 
 class DeepSeekBackend(BaseLLMBackend):
@@ -202,7 +315,7 @@ class DeepSeekBackend(BaseLLMBackend):
             return self.reasoner_model_name
         return self.chat_model_name
 
-    def generate(self, messages, max_tokens: int = 2500, task: str = "default") -> str:
+    def generate(self, messages, max_tokens: int = LLM_MAX_TOKENS, task: str = "default") -> str:
         if self.client is None:
             raise RuntimeError("DeepSeek 客户端尚未初始化，请先调用 initialize()")
 
@@ -217,7 +330,7 @@ class DeepSeekBackend(BaseLLMBackend):
             content = response.choices[0].message.content
             if content is None:
                 return ""
-            return content.strip()
+            return self.normalize_response(content, task)
         except Exception as e:
             print(f"❌ DeepSeek API 调用失败: {e}")
             if "api_key" in str(e).lower() or "authentication" in str(e).lower():
@@ -226,11 +339,12 @@ class DeepSeekBackend(BaseLLMBackend):
 
 
 def prompt_backend_choice():
-    default_choice = DEFAULT_BACKEND if DEFAULT_BACKEND in {"deepseek", "qwen"} else "deepseek"
+    default_choice = DEFAULT_BACKEND if DEFAULT_BACKEND in {"deepseek", "qwen", "abb_qwen"} else "deepseek"
     print("\n请选择本次运行使用的模型后端：")
     print("  1. DeepSeek（章节摘要/评审: deepseek-chat；控制点生成: deepseek-reasoner）")
     print("  2. Qwen（始终 qwen3.6-plus；仅控制点生成启用 thinking）")
-    choice = input(f"请输入 1 或 2，直接回车默认 {default_choice}: ").strip().lower()
+    print("  3. ABB Qwen（qwen3.5；参考 ABB_qwen_chat_demo.py；仅控制点生成启用 thinking）")
+    choice = input(f"请输入 1、2 或 3，直接回车默认 {default_choice}: ").strip().lower()
 
     if not choice:
         return default_choice
@@ -238,6 +352,8 @@ def prompt_backend_choice():
         return "deepseek"
     if choice in {"2", "qwen", "q"}:
         return "qwen"
+    if choice in {"3", "abb_qwen", "abb-qwen", "abb", "a"}:
+        return "abb_qwen"
 
     print(f"⚠️ 无法识别选择 [{choice}]，使用默认后端: {default_choice}")
     return default_choice
@@ -261,8 +377,13 @@ def select_backend():
         if not QWEN_API_KEY:
             raise ValueError("Qwen API Key 未设置，请设置 DASHSCOPE_API_KEY 环境变量")
         return QwenBackend(QWEN_BASE_URL, QWEN_API_KEY, QWEN_MODEL_NAME)
+    elif backend_choice == "abb_qwen":
+        print("🧠 配置使用 ABB Qwen 后端")
+        if not ABB_QWEN_API_KEY:
+            raise ValueError("ABB Qwen API Key 未设置，请设置 ABB_QWEN_API_KEY 环境变量")
+        return ABBQwenBackend(ABB_QWEN_BASE_URL, ABB_QWEN_API_KEY, ABB_QWEN_MODEL_NAME)
     else:
-        raise ValueError(f"未知的后端配置: {backend_choice}，请设置为 'deepseek' 或 'qwen'")
+        raise ValueError(f"未知的后端配置: {backend_choice}，请设置为 'deepseek'、'qwen' 或 'abb_qwen'")
 
 
 # ===========================================
@@ -408,8 +529,9 @@ def build_analysis_messages(backend, law_name, chapter_title, chapter_summary, a
 1. 先基于本章导览理解当前条文在本章中的作用。
 2. 再只针对当前条文 `{article_ref}` 输出控制点。
 3. 请严格参照 System Prompt 中的规则。
-4. 只输出符合要求的 markdown 表格行；不要输出解释、标题、前言、结语。
-5. 不适用时返回空白。"""
+4. 你可以在内部进行推理，但最终答案必须以 `FINAL_OUTPUT:` 单独起始。
+5. `FINAL_OUTPUT:` 之后只允许输出符合要求的 markdown 表格行；不要输出解释、标题、前言、结语。
+6. 不适用时，`FINAL_OUTPUT:` 之后保持真正空白。"""
 
     return backend.build_messages(system_prompt, user_prompt)
 
@@ -598,7 +720,7 @@ def main():
 {AUDITED_ORGANIZATION_PROFILE}"""
         )
         try:
-            chapter_analysis = backend.generate(analyst_messages, max_tokens=300, task="chapter_analysis")
+            chapter_analysis = backend.generate(analyst_messages, max_tokens=LLM_MAX_TOKENS, task="chapter_analysis")
             print(f"      ✅ 章节摘要生成完成 ({len(chapter_analysis)} 字符)")
         except Exception as e:
             print(f"      ❌ 分析师阶段失败: {e}")
@@ -627,7 +749,7 @@ def main():
             )
 
             try:
-                response_text = backend.generate(messages, max_tokens=2500, task="control_generation")
+                response_text = backend.generate(messages, max_tokens=LLM_MAX_TOKENS, task="control_generation")
             except Exception as error:
                 print(f"         ❌ 模型调用失败: {error}")
                 write_review_entry(
@@ -678,7 +800,7 @@ def main():
 请基于评审员技能中的标准进行严格审查。请只输出以下三个标签之一：PASS、REVIEW 或 FAIL，不要输出任何其他内容。"""
                 )
                 try:
-                    reviewer_response = backend.generate(reviewer_messages, max_tokens=50, task="review")
+                    reviewer_response = backend.generate(reviewer_messages, max_tokens=LLM_MAX_TOKENS, task="review")
                     reviewer_response = reviewer_response.strip().upper()
 
                     # Simplified parsing - only check for PASS, REVIEW, or FAIL
