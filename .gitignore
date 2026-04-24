@@ -215,9 +215,10 @@ Thumbs.db
 **/.next/
 
 # --- Local app outputs ---
-podcast/temp/
+Archive/podcast/temp/
 
 # --- Generated compliance artifacts ---
 IT Compliance/controls identification/*_parsed.txt
 IT Compliance/controls identification/*_合规矩阵.md
 IT Compliance/controls identification/*_复核清单.md
+.env
