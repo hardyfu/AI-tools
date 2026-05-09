@@ -17,6 +17,16 @@ enum TransactionType {
   expense
 }
 
+enum AssetType {
+  fund
+  gold
+}
+
+enum AssetTradeType {
+  buy
+  sell
+}
+
 model Book {
   id                String             @id @default(cuid())
   name              BookName           @unique
@@ -26,6 +36,7 @@ model Book {
   transactions      Transaction[]
   salaryAllocations SalaryAllocation[]
   openingFund       OpeningFund?
+  assetHoldings     AssetHolding[]
 }
 
 model Category {
@@ -110,4 +121,41 @@ model OpeningFundBucket {
   openingFund   OpeningFund @relation(fields: [openingFundId], references: [id], onDelete: Cascade)
 
   @@index([openingFundId])
+}
+
+model AssetHolding {
+  id           String       @id @default(cuid())
+  bookId       String
+  type         AssetType
+  name         String
+  quantity     Decimal      @default(0)
+  costAmount   Decimal      @default(0)
+  currentPrice Decimal      @default(0)
+  currentValue Decimal      @default(0)
+  note         String?
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  book         Book         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  trades       AssetTrade[]
+
+  @@index([bookId, type])
+}
+
+model AssetTrade {
+  id          String         @id @default(cuid())
+  holdingId   String
+  tradeType   AssetTradeType
+  date        DateTime
+  quantity    Decimal
+  price       Decimal        @default(0)
+  amount      Decimal
+  fee         Decimal        @default(0)
+  note        String?
+  relationKey String?
+  createdAt   DateTime       @default(now())
+  holding     AssetHolding   @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+
+  @@index([holdingId, date])
+  @@index([relationKey])
 }

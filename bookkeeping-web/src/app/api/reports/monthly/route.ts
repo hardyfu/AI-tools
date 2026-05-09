@@ -55,8 +55,6 @@ export async function GET(request: NextRequest) {
     openingFundTotal =
       Number(openingFund?.cashAmount ?? 0) +
       Number(openingFund?.wealthAmount ?? 0) +
-      Number(openingFund?.investmentAmount ?? 0) +
-      Number(openingFund?.goldValuation ?? 0) +
       openingFundBucketTotal;
   } catch {
     openingFundTotal = 0;

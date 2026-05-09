@@ -7,6 +7,7 @@ const navItems = [
   { href: "/", label: "仪表盘" },
   { href: "/transactions", label: "流水" },
   { href: "/salary", label: "工资分配" },
+  { href: "/assets", label: "资产持仓" },
   { href: "/settings/opening-funds", label: "起始资金" },
   { href: "/settings/categories", label: "分类设置" },
 ];

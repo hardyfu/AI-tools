@@ -32,8 +32,6 @@ export async function GET(request: NextRequest) {
   for (const fund of funds) {
     add("现金", Number(fund.cashAmount));
     add("理财", Number(fund.wealthAmount));
-    add("投资", Number(fund.investmentAmount));
-    add("黄金投资", Number(fund.goldValuation));
     for (const bucket of fund.buckets) {
       add(bucket.name, Number(bucket.amount));
     }
@@ -41,8 +39,6 @@ export async function GET(request: NextRequest) {
 
   if (!totals.has("现金")) add("现金", 0);
   if (!totals.has("理财")) add("理财", 0);
-  if (!totals.has("投资")) add("投资", 0);
-  if (!totals.has("黄金投资")) add("黄金投资", 0);
 
   const assets = Array.from(totals.entries())
     .map(([name, amount]) => ({ name, amount }))

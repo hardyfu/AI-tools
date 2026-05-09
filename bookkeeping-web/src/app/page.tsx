@@ -23,6 +23,7 @@ type Summary = {
   monthBalance: number;
   runningBalance: number;
   openingFundTotal: number;
+  assetHoldingTotal: number;
 };
 type BreakdownItem = { categoryId: string; categoryName: string; type: string; amount: number };
 type TrendItem = { month: string; income: number; expense: number; balance: number };
@@ -45,6 +46,7 @@ const emptySummary: Summary = {
   monthBalance: 0,
   runningBalance: 0,
   openingFundTotal: 0,
+  assetHoldingTotal: 0,
 };
 
 async function parseJson<T>(res: Response): Promise<T | null> {
@@ -184,13 +186,21 @@ export default function DashboardPage() {
         const assetRes = await fetch(assetUrl, { cache: "no-store" });
         const assetData = assetRes.ok ? await parseJson<{ assets?: AssetItem[]; total?: number }>(assetRes) : null;
         const openingFundTotal = Number(assetData?.total ?? 0);
+        const holdingUrl =
+          selected.type === "all"
+            ? "/api/assets?summary=1&scope=all"
+            : `/api/assets?summary=1&bookId=${selected.id}`;
+        const holdingRes = await fetch(holdingUrl, { cache: "no-store" });
+        const holdingData = holdingRes.ok ? await parseJson<{ assets?: AssetItem[]; total?: number }>(holdingRes) : null;
+        const assetHoldingTotal = Number(holdingData?.total ?? 0);
 
         setSummary({
           income,
           expense,
           monthBalance,
-          runningBalance: openingFundTotal + monthBalance,
+          runningBalance: openingFundTotal + assetHoldingTotal + monthBalance,
           openingFundTotal,
+          assetHoldingTotal,
         });
         setBreakdown(buildBreakdown(transactions));
         setTrend(buildTrend(transactions));
@@ -199,7 +209,7 @@ export default function DashboardPage() {
             .sort((a, b) => b.date.localeCompare(a.date))
             .slice(0, 8),
         );
-        const baseAssets = assetData?.assets ?? [];
+        const baseAssets = [...(assetData?.assets ?? []), ...(holdingData?.assets ?? [])];
         setAssetBreakdown(applyFlowToAssets(baseAssets, monthBalance));
       } catch {
         setSummary({ ...emptySummary });
@@ -263,10 +273,14 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-5">
+      <section className="grid gap-4 md:grid-cols-6">
         <article className="card p-4">
-          <p className="text-sm text-stone-500">起始资金</p>
+          <p className="text-sm text-stone-500">静态期初</p>
           <p className="mt-1 text-2xl font-semibold text-stone-900">{formatCurrency(summary.openingFundTotal)}</p>
+        </article>
+        <article className="card p-4">
+          <p className="text-sm text-stone-500">持仓估值</p>
+          <p className="mt-1 text-2xl font-semibold text-stone-900">{formatCurrency(summary.assetHoldingTotal)}</p>
         </article>
         <article className="card p-4">
           <p className="text-sm text-stone-500">收入</p>
@@ -281,7 +295,7 @@ export default function DashboardPage() {
           <p className="mt-1 text-2xl font-semibold text-stone-900">{formatCurrency(summary.monthBalance)}</p>
         </article>
         <article className="card p-4">
-          <p className="text-sm text-stone-500">筛选后总资金</p>
+          <p className="text-sm text-stone-500">Overall 总资产</p>
           <p className="mt-1 text-2xl font-semibold text-stone-900">{formatCurrency(summary.runningBalance)}</p>
         </article>
       </section>

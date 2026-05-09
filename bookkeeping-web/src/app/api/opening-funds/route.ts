@@ -16,8 +16,6 @@ function toAssets(openingFund: {
   const base: AssetItem[] = [
     { key: "cash", name: "现金", amount: Number(openingFund?.cashAmount ?? 0), editable: false },
     { key: "wealth", name: "理财", amount: Number(openingFund?.wealthAmount ?? 0), editable: false },
-    { key: "investment", name: "投资", amount: Number(openingFund?.investmentAmount ?? 0), editable: false },
-    { key: "gold", name: "黄金投资", amount: Number(openingFund?.goldValuation ?? 0), editable: false },
   ];
   const custom =
     openingFund?.buckets.map((bucket) => ({
@@ -86,10 +84,10 @@ export async function POST(request: NextRequest) {
     const bookId = String(body.bookId ?? familyBook.id);
     const cashAmount = Number(body.cashAmount ?? 0);
     const wealthAmount = Number(body.wealthAmount ?? 0);
-    const investmentAmount = Number(body.investmentAmount ?? 0);
-    const goldWeight = Number(body.goldWeight ?? 0);
-    const goldAvgPrice = Number(body.goldAvgPrice ?? 0);
-    const goldValuation = Number(body.goldValuation ?? goldWeight * goldAvgPrice);
+    const investmentAmount = 0;
+    const goldWeight = 0;
+    const goldAvgPrice = 0;
+    const goldValuation = 0;
     const customAssets: CustomAssetInput[] = Array.isArray(body.customAssets)
       ? body.customAssets
           .map((item: { name?: unknown; amount?: unknown }) => ({
@@ -100,9 +98,7 @@ export async function POST(request: NextRequest) {
       : [];
     const note = body.note ? String(body.note) : null;
 
-    const invalidBase = [cashAmount, wealthAmount, investmentAmount, goldWeight, goldAvgPrice, goldValuation].some(
-      (value) => Number.isNaN(value) || value < 0,
-    );
+    const invalidBase = [cashAmount, wealthAmount].some((value) => Number.isNaN(value) || value < 0);
     const invalidCustom = customAssets.some((item: CustomAssetInput) => Number.isNaN(item.amount) || item.amount < 0);
     const invalid = invalidBase || invalidCustom;
     if (invalid) {

@@ -19,8 +19,8 @@ MAX_CHAPTERS_IN_TEST = 2
 # ================= 配置区域 =================
 # DeepSeek API 配置
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/beta"
-DEEPSEEK_CHAT_MODEL_NAME = "deepseek-chat"
-DEEPSEEK_REASONER_MODEL_NAME = "deepseek-reasoner"
+DEEPSEEK_CHAT_MODEL_NAME = "deepseek-v4-flash"
+DEEPSEEK_REASONER_MODEL_NAME = "deepseek-v4-pro"
 
 # Qwen API 配置（阿里云百炼 OpenAI-compatible 模式）
 QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -341,7 +341,7 @@ class DeepSeekBackend(BaseLLMBackend):
 def prompt_backend_choice():
     default_choice = DEFAULT_BACKEND if DEFAULT_BACKEND in {"deepseek", "qwen", "abb_qwen"} else "deepseek"
     print("\n请选择本次运行使用的模型后端：")
-    print("  1. DeepSeek（章节摘要/评审: deepseek-chat；控制点生成: deepseek-reasoner）")
+    print("  1. DeepSeek（章节摘要/评审: deepseek-v4-flash；控制点生成: deepseek-v4-pro）")
     print("  2. Qwen（始终 qwen3.6-plus；仅控制点生成启用 thinking）")
     print("  3. ABB Qwen（qwen3.5；参考 ABB_qwen_chat_demo.py；仅控制点生成启用 thinking）")
     choice = input(f"请输入 1、2 或 3，直接回车默认 {default_choice}: ").strip().lower()
@@ -529,9 +529,10 @@ def build_analysis_messages(backend, law_name, chapter_title, chapter_summary, a
 1. 先基于本章导览理解当前条文在本章中的作用。
 2. 再只针对当前条文 `{article_ref}` 输出控制点。
 3. 请严格参照 System Prompt 中的规则。
-4. 你可以在内部进行推理，但最终答案必须以 `FINAL_OUTPUT:` 单独起始。
-5. `FINAL_OUTPUT:` 之后只允许输出符合要求的 markdown 表格行；不要输出解释、标题、前言、结语。
-6. 不适用时，`FINAL_OUTPUT:` 之后保持真正空白。"""
+4. 每一行的“法律要求”列必须以 `【{article_ref}】` 开头，且只能引用这个条文号。
+5. 你可以在内部进行推理，但最终答案必须以 `FINAL_OUTPUT:` 单独起始。
+6. `FINAL_OUTPUT:` 之后只允许输出符合要求的 markdown 表格行；不要输出解释、标题、前言、结语。
+7. 不适用时，`FINAL_OUTPUT:` 之后保持真正空白。"""
 
     return backend.build_messages(system_prompt, user_prompt)
 
@@ -582,7 +583,7 @@ def is_actionable_article(article_text, chapter_title):
     return True
 
 
-def validate_output_row(line, valid_domains, chapter_title, article_map):
+def validate_output_row(line, valid_domains, chapter_title, article_map, expected_article_ref=None):
     cells = split_markdown_row(line)
     if not cells:
         return False, "列数不是 5 列", None
@@ -594,10 +595,15 @@ def validate_output_row(line, valid_domains, chapter_title, article_map):
         return False, f"类型不是强制: {row_type}", None
 
     cited_refs = extract_article_refs(legal_requirement)
+    if not cited_refs and expected_article_ref:
+        cited_refs = {expected_article_ref}
     if len(cited_refs) != 1:
         return False, "法律要求必须且只能引用一个条款", None
 
     cited_ref = next(iter(cited_refs))
+    if expected_article_ref and cited_ref != expected_article_ref:
+        return False, f"法律要求引用条款与当前条文不一致: {cited_ref} != {expected_article_ref}", None
+
     source_article = article_map.get(cited_ref)
     if not source_article:
         return False, f"当前批次不存在引用条款: {cited_ref}", None
@@ -709,6 +715,7 @@ def main():
 
         # Step 1: Analyst phase - generate chapter summary
         print(f"      📋 分析师阶段: 生成章节摘要...")
+        chapter_overview = build_chapter_overview(chapter_info)
         analyst_messages = backend.build_messages(
             analyst_system_prompt,
             f"""请分析 **《{law_name}》** 的 **【{chapter_title}】**。
@@ -717,7 +724,10 @@ def main():
 {AUDITED_ORGANIZATION_NAME}
 
 组织适用性画像：
-{AUDITED_ORGANIZATION_PROFILE}"""
+{AUDITED_ORGANIZATION_PROFILE}
+
+本章条文导览：
+{chapter_overview}"""
         )
         try:
             chapter_analysis = backend.generate(analyst_messages, max_tokens=LLM_MAX_TOKENS, task="chapter_analysis")
@@ -806,7 +816,7 @@ def main():
                     # Simplified parsing - only check for PASS, REVIEW, or FAIL
                     if reviewer_response.startswith("PASS"):
                         is_valid, reason, normalized_line = validate_output_row(
-                            line, valid_domains, chapter_title, article_lookup
+                            line, valid_domains, chapter_title, article_lookup, article_ref
                         )
                         if is_valid:
                             valid_lines.append(normalized_line)
@@ -828,7 +838,7 @@ def main():
                     print(f"         ⚠️ 评审阶段失败: {e}")
                     # Fallback to original validation
                     is_valid, reason, normalized_line = validate_output_row(
-                        line, valid_domains, chapter_title, article_lookup
+                        line, valid_domains, chapter_title, article_lookup, article_ref
                     )
                     if is_valid:
                         valid_lines.append(normalized_line)
