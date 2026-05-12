@@ -1,0 +1,443 @@
+{
+  "title": "sample_control_point_eval_demo.py Workflow",
+  "direction": "down",
+  "style": {
+    "fontSize": 16,
+    "strokeWidth": 2,
+    "roughness": 1
+  },
+  "nodes": [
+    {
+      "id": "stage_entry",
+      "label": "1. 入口与输入模式",
+      "type": "note",
+      "fill": "#f1f3f5",
+      "x": 120,
+      "y": 115,
+      "width": 980,
+      "height": 55
+    },
+    {
+      "id": "start",
+      "label": "启动脚本\n解析 CLI 参数",
+      "type": "ellipse",
+      "fill": "#fff4e6",
+      "x": 450,
+      "y": 210,
+      "width": 320,
+      "height": 110
+    },
+    {
+      "id": "from_json",
+      "label": "--from-json?",
+      "type": "diamond",
+      "fill": "#fff9db",
+      "x": 490,
+      "y": 375,
+      "width": 240,
+      "height": 130
+    },
+    {
+      "id": "md_only",
+      "label": "读取已有 JSON\n生成 Markdown\n结束",
+      "type": "ellipse",
+      "fill": "#e7f5ff",
+      "x": 840,
+      "y": 388,
+      "width": 330,
+      "height": 120
+    },
+    {
+      "id": "prepare",
+      "label": "检查 sample.docx\n确定 OCR 策略",
+      "fill": "#e7f5ff",
+      "x": 430,
+      "y": 570,
+      "width": 360,
+      "height": 110
+    },
+    {
+      "id": "stage_extract",
+      "label": "2. DOCX 解析与证据抽取",
+      "type": "note",
+      "fill": "#f1f3f5",
+      "x": 120,
+      "y": 750,
+      "width": 980,
+      "height": 55
+    },
+    {
+      "id": "docx_open",
+      "label": "打开 DOCX zip\n读取 rels / styles / document.xml",
+      "fill": "#e6fcf5",
+      "x": 390,
+      "y": 850,
+      "width": 440,
+      "height": 115
+    },
+    {
+      "id": "docx_scan",
+      "label": "遍历 DOCX body\n按块抽取证据",
+      "fill": "#e6fcf5",
+      "x": 430,
+      "y": 1035,
+      "width": 360,
+      "height": 110
+    },
+    {
+      "id": "heading",
+      "label": "Heading 1\n映射 XLSX 控制点",
+      "fill": "#d3f9d8",
+      "x": 80,
+      "y": 1225,
+      "width": 330,
+      "height": 110
+    },
+    {
+      "id": "paragraph",
+      "label": "段落 / 嵌入对象\n文本、OCR、Excel、PDF",
+      "fill": "#d3f9d8",
+      "x": 445,
+      "y": 1225,
+      "width": 330,
+      "height": 110
+    },
+    {
+      "id": "table",
+      "label": "表格块\n提取前 20 行",
+      "fill": "#d3f9d8",
+      "x": 810,
+      "y": 1225,
+      "width": 330,
+      "height": 110
+    },
+    {
+      "id": "sections",
+      "label": "形成 sections\nheading + control_point + evidence_parts",
+      "type": "ellipse",
+      "fill": "#fff4e6",
+      "x": 365,
+      "y": 1425,
+      "width": 490,
+      "height": 120
+    },
+    {
+      "id": "stage_eval",
+      "label": "3. 逐控制点评估",
+      "type": "note",
+      "fill": "#f1f3f5",
+      "x": 120,
+      "y": 1620,
+      "width": 980,
+      "height": 55
+    },
+    {
+      "id": "select",
+      "label": "筛选待评估标题\n--headings / --max-sections",
+      "fill": "#e7f5ff",
+      "x": 365,
+      "y": 1720,
+      "width": 490,
+      "height": 110
+    },
+    {
+      "id": "per_section",
+      "label": "逐 section 处理",
+      "fill": "#f3f0ff",
+      "x": 445,
+      "y": 1895,
+      "width": 330,
+      "height": 100
+    },
+    {
+      "id": "combine",
+      "label": "组合证据文本\n按来源生成概览",
+      "fill": "#f3f0ff",
+      "x": 405,
+      "y": 2060,
+      "width": 410,
+      "height": 110
+    },
+    {
+      "id": "control_found",
+      "label": "匹配到控制点?",
+      "type": "diamond",
+      "fill": "#fff9db",
+      "x": 490,
+      "y": 2245,
+      "width": 240,
+      "height": 130
+    },
+    {
+      "id": "review_no_control",
+      "label": "未匹配编号\n标记 Review",
+      "fill": "#ffe3e3",
+      "x": 835,
+      "y": 2255,
+      "width": 330,
+      "height": 110
+    },
+    {
+      "id": "extract_only",
+      "label": "--extract-only?",
+      "type": "diamond",
+      "fill": "#fff9db",
+      "x": 490,
+      "y": 2445,
+      "width": 240,
+      "height": 130
+    },
+    {
+      "id": "review_extract_only",
+      "label": "不调用模型\n默认 Review",
+      "fill": "#fff0f6",
+      "x": 55,
+      "y": 2455,
+      "width": 330,
+      "height": 110
+    },
+    {
+      "id": "judge",
+      "label": "调用 qwen3:8b\n判断证据\n输出 Pass / Fail / Review",
+      "fill": "#f3f0ff",
+      "x": 395,
+      "y": 2645,
+      "width": 430,
+      "height": 125
+    },
+    {
+      "id": "judge_error",
+      "label": "模型异常\n降级为 Review",
+      "fill": "#fff0f6",
+      "x": 835,
+      "y": 2652,
+      "width": 330,
+      "height": 110
+    },
+    {
+      "id": "result",
+      "label": "生成单项结果\npreview + has_evidence + judge",
+      "fill": "#f3f0ff",
+      "x": 365,
+      "y": 2855,
+      "width": 490,
+      "height": 115
+    },
+    {
+      "id": "loop_note",
+      "label": "重复评估\n直到所有 section 完成",
+      "type": "ellipse",
+      "fill": "#fff4e6",
+      "x": 405,
+      "y": 3045,
+      "width": 410,
+      "height": 110
+    },
+    {
+      "id": "stage_report",
+      "label": "4. 报告输出",
+      "type": "note",
+      "fill": "#f1f3f5",
+      "x": 120,
+      "y": 3230,
+      "width": 980,
+      "height": 55
+    },
+    {
+      "id": "coverage",
+      "label": "强制项覆盖检查\n统计缺失 mandatory 控制点",
+      "fill": "#e7f5ff",
+      "x": 365,
+      "y": 3330,
+      "width": 490,
+      "height": 115
+    },
+    {
+      "id": "summary",
+      "label": "汇总 Pass / Fail / Review",
+      "fill": "#e7f5ff",
+      "x": 405,
+      "y": 3520,
+      "width": 410,
+      "height": 105
+    },
+    {
+      "id": "write",
+      "label": "写出报告\nJSON + Markdown",
+      "fill": "#d3f9d8",
+      "x": 405,
+      "y": 3695,
+      "width": 410,
+      "height": 110
+    },
+    {
+      "id": "outputs",
+      "label": "sample_control_eval_report.json\nsample_control_eval_report.md",
+      "type": "ellipse",
+      "fill": "#fff4e6",
+      "x": 345,
+      "y": 3880,
+      "width": 530,
+      "height": 120
+    },
+    {
+      "id": "note",
+      "label": "说明: 代码中的 DOCX body 遍历和逐 section 评估是循环；图中用顺序节点表达，避免回流箭头造成交叉。",
+      "type": "note",
+      "fill": "#f8f9fa",
+      "x": 120,
+      "y": 4075,
+      "width": 980,
+      "height": 80
+    }
+  ],
+  "edges": [
+    {
+      "from": "stage_entry",
+      "to": "start"
+    },
+    {
+      "from": "start",
+      "to": "from_json"
+    },
+    {
+      "from": "from_json",
+      "to": "md_only",
+      "label": "yes"
+    },
+    {
+      "from": "from_json",
+      "to": "prepare",
+      "label": "no"
+    },
+    {
+      "from": "prepare",
+      "to": "stage_extract"
+    },
+    {
+      "from": "stage_extract",
+      "to": "docx_open"
+    },
+    {
+      "from": "docx_open",
+      "to": "docx_scan"
+    },
+    {
+      "from": "docx_scan",
+      "to": "heading",
+      "label": "Heading 1"
+    },
+    {
+      "from": "docx_scan",
+      "to": "paragraph",
+      "label": "paragraph"
+    },
+    {
+      "from": "docx_scan",
+      "to": "table",
+      "label": "table"
+    },
+    {
+      "from": "heading",
+      "to": "sections"
+    },
+    {
+      "from": "paragraph",
+      "to": "sections"
+    },
+    {
+      "from": "table",
+      "to": "sections"
+    },
+    {
+      "from": "sections",
+      "to": "stage_eval"
+    },
+    {
+      "from": "stage_eval",
+      "to": "select"
+    },
+    {
+      "from": "select",
+      "to": "per_section"
+    },
+    {
+      "from": "per_section",
+      "to": "combine"
+    },
+    {
+      "from": "combine",
+      "to": "control_found"
+    },
+    {
+      "from": "control_found",
+      "to": "review_no_control",
+      "label": "no"
+    },
+    {
+      "from": "review_no_control",
+      "to": "result"
+    },
+    {
+      "from": "control_found",
+      "to": "extract_only",
+      "label": "yes"
+    },
+    {
+      "from": "extract_only",
+      "to": "review_extract_only",
+      "label": "yes"
+    },
+    {
+      "from": "review_extract_only",
+      "to": "result"
+    },
+    {
+      "from": "extract_only",
+      "to": "judge",
+      "label": "no"
+    },
+    {
+      "from": "judge",
+      "to": "result",
+      "label": "success"
+    },
+    {
+      "from": "judge",
+      "to": "judge_error",
+      "label": "exception"
+    },
+    {
+      "from": "judge_error",
+      "to": "result"
+    },
+    {
+      "from": "result",
+      "to": "loop_note"
+    },
+    {
+      "from": "loop_note",
+      "to": "stage_report"
+    },
+    {
+      "from": "stage_report",
+      "to": "coverage"
+    },
+    {
+      "from": "coverage",
+      "to": "summary"
+    },
+    {
+      "from": "summary",
+      "to": "write"
+    },
+    {
+      "from": "write",
+      "to": "outputs"
+    },
+    {
+      "from": "outputs",
+      "to": "note"
+    }
+  ]
+}
